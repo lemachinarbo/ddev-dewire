@@ -2,5 +2,9 @@ name: compwser
 
 project_files:
   - docker-compose.compwser.yaml
+  - commands/host/lib/common.sh
+  - commands/host/pw-start
+  - commands/web/rs
+  - compwser/
 
 ddev_version_constraint: '>= v1.24.3'

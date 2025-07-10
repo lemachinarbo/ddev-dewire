@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+#ddev-generated
+## Description: Install and bootstrap ProcessWire project
+## Usage: pw-start
+
+set -eu
+trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
+
+# Source common logging/colors and helpers
+source "$(dirname "$0")/lib/common.sh"
+
+echo
+log_header "Updating DDEV config..."
+log_hr
+# Ensure .ddev/config.yaml has docroot: public and webserver_type: apache-fpm using ddev config
+if command -v ddev >/dev/null 2>&1; then
+  ddev config --docroot=public --webserver-type=apache-fpm
+  log_ok 'docroot set to public.'
+  log_ok 'webserver_type set to apache-fpm.'
+fi
+
+main() {
+  echo
+  log_header "Init git & copy Composer template ..."
+  log_hr
+  if [ -d .git ]; then
+    log_warn 'Git repository already initialized.'
+  else
+    if git init --initial-branch=main; then
+      log_ok 'Git repository initialized.'
+    else
+      log_error 'Failed to initialize git repository.'
+      exit 1
+    fi
+  fi
+  # Copy .gitignore template to project root if it exists
+  if [ -f .ddev/compwser/templates/.gitignore.example ]; then
+    cp .ddev/compwser/templates/.gitignore.example .gitignore
+    log_ok '.gitignore template copied to project root.'
+  else
+    log_warn '.gitignore template not found in .ddev/compwser/templates/'
+  fi
+  # Copy composer.json template to project root if it exists
+  if [ -f .ddev/compwser/templates/composer.template.json ]; then
+    cp .ddev/compwser/templates/composer.template.json composer.json
+    log_ok 'composer.json template copied to project root.'
+  else
+    log_warn 'composer.template.json template not found in .ddev/compwser/templates/'
+  fi
+
+  install_rockshell
+  install_processwire
+  install_rockmigrations
+  backup_database
+  cleanup_pw_files
+  echo
+  log_success "Setup complete!"
+  echo
+  log_header 'Restarting DDEV ...'
+  log_hr
+  ddev restart
+}
+
+add_submodule() {
+  local url="$1"
+  local path="$2"
+  if git config --file .gitmodules --get-regexp path | grep -q "^[^ ]* $path$"; then
+    log_warn "$path submodule already registered."
+  elif [ -d "$path" ]; then
+    log_warn "$path directory exists but is not a registered submodule. Please resolve manually if you encounter issues."
+  else
+    if git submodule add -b dev "$url" "$path"; then
+      log_ok "$path submodule added."
+    else
+      log_error "Failed to add $path submodule."
+      exit 1
+    fi
+  fi
+}
+
+install_rockshell() {
+  echo
+  log_header "Installing RockShell ..."
+  log_hr
+  add_submodule "https://github.com/lemachinarbo/RockShell.git" "RockShell"
+  git submodule update --init --recursive || { log_error 'Failed to update submodules.'; exit 1; }
+  if [ ! -f RockShell/rock ]; then
+    log_error 'RockShell/rock is not present.'
+    exit 1
+  fi
+}
+
+install_processwire() {
+  echo
+  log_header "Installing ProcessWire ..."
+  log_hr
+  if (ddev rs pw:installer --lazy); then
+    log_ok 'ProcessWire installed via RockShell.'
+  else
+    log_error 'Failed to install ProcessWire via RockShell.'
+    exit 1
+  fi
+}
+
+install_rockmigrations() {
+  echo
+  log_header "Installing RockMigrations ..."
+  log_hr
+  add_submodule "https://github.com/lemachinarbo/RockMigrations.git" "public/site/modules/RockMigrations"
+  git submodule update --init --recursive || { log_error 'Failed to update submodules.'; exit 1; }
+  if (ddev rs module:install -m RockMigrations); then
+    log_ok 'RockMigrations module installed.'
+  else
+    log_warn 'Failed to install RockMigrations module.'
+  fi
+  if (ddev rs pw:refresh); then
+    log_ok 'Modules refreshed.'
+  else
+    log_warn 'Failed to refresh modules.'
+  fi
+}
+
+backup_database() {
+  echo
+  log_header "Backing up database ..."
+  log_hr
+  if (ddev rs db:dump); then
+    log_ok 'Database dump complete.'
+  else
+    log_warn 'Failed to dump database.'
+  fi
+}
+
+cleanup_pw_files() {
+  echo
+  log_header "Cleaning up ProcessWire files ..."
+  log_hr
+  if [ -d ./public/site/modules/RockMigrations ]; then
+    pushd ./public/site/modules/RockMigrations >/dev/null || { log_warn 'Could not enter RockMigrations directory for cleanup.'; return; }
+    git reset --hard
+    git clean -fdx
+    popd >/dev/null
+  else
+    log_warn 'RockMigrations submodule not present, skipping clean/reset'
+  fi
+  if [ -f public/README.md ]; then
+    rm public/README.md && log_ok 'public/README.md deleted.'
+  else
+    log_warn 'README.md not found'
+  fi
+
+  if [ -f public/CONTRIBUTING.md ]; then
+    rm public/CONTRIBUTING.md && log_ok 'public/CONTRIBUTING.md deleted.'
+  else
+    log_warn 'CONTRIBUTING.md not found'
+  fi
+
+  if [ -f public/LICENSE.TXT ]; then
+    rm public/LICENSE.TXT && log_ok 'public/LICENSE.TXT deleted.'
+  else
+    log_warn 'LICENSE.TXT not found'
+  fi
+
+  if [ -f public/composer.json ]; then
+    rm public/composer.json && log_ok 'public/composer.json deleted.'
+  else
+    log_warn 'ProcessWire composer.json not found'
+  fi
+  log_ok 'ProcessWire cleanup complete.'
+}
+
+main "$@"
