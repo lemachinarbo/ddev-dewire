@@ -1,0 +1,6 @@
+#!/bin/bash
+#ddev-generated
+## Description: Run RockShell inside the web container
+## Usage: rs [arguments]
+## Example: "ddev rs" or "ddev rs pw:download"
+php /var/www/html/RockShell/rock "$@"
