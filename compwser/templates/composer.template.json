@@ -1,0 +1,8 @@
+{
+  "name": "your/project",
+  "type": "project",
+  "require": {
+    "php": ">=8.0",
+    "processwire/processwire": "^3.0"
+  }
+}

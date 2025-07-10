@@ -1,0 +1,21 @@
+# snippets
+.vscode
+
+# setup
+.build/
+
+# ignore vendors
+vendor/
+node_modules/
+
+# sensible files 
+.env
+public/site/config.php.bak
+public/site/config-local.php
+public/site/config-local*
+
+# assets
+public/site/assets/*
+!public/site/assets/backups/
+!public/site/assets/backups/database/
+!public/site/assets/backups/database/db.sql
