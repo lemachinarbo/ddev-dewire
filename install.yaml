@@ -3,8 +3,15 @@ name: compwser
 project_files:
   - docker-compose.compwser.yaml
   - commands/host/lib/common.sh
+  - commands/host/config-split
+  - commands/host/github-env
+  - commands/host/github-workflow
+  - commands/host/compwser-deploy
   - commands/host/pw-start
   - commands/web/rs
+  - commands/host/sshkeys-generate
+  - commands/host/sshkeys-install
+  - commands/host/sync
   - compwser/
 
 ddev_version_constraint: '>= v1.24.3'

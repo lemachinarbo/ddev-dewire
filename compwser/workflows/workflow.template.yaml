@@ -1,0 +1,88 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: environment.name
+    env:
+      SUBMODULES: true
+      # by default RockMigrations will try to get the PHP version automatically
+      # if this does not work for you you can set the php command manually
+      # Example: PHP_COMMAND: "/user/bin/php8.1-cli"
+      PHP_COMMAND: ${{ vars.PHP_COMMAND }}
+      # php command to be used to execute get-php.php
+      # get-php needs PHP8+ so if the default php command of the operating
+      # system is not PHP8+ you need to set this variable to a php8+ command
+      # Example: GET_PHP_COMMAND: "/user/bin/php8.1-cli"
+      GET_PHP_COMMAND: ${{ vars.GET_PHP_COMMAND || 'php' }}
+      PW_ROOT: ${{ vars.PW_ROOT || 'public' }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+    steps:
+      - name: Checkout
+        if: ${{ !env.SUBMODULES }}
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Checkout with Submodules
+        if: ${{ env.SUBMODULES }}
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.CI_TOKEN }}
+          submodules: true
+
+      - name: 📋 List files in the repository
+        run: ls ${{ github.workspace }}
+
+      - name: ⛽ Setup Variables
+        run: |
+          SHORT_SHA=$(echo ${GITHUB_SHA} | cut -c1-8)
+          echo "SHORT_SHA=$SHORT_SHA" >> $GITHUB_ENV
+          CURRENT_DATE=$(date +%Y%m%d%H%M%S)
+          echo "CURRENT_DATE=$CURRENT_DATE" >> $GITHUB_ENV
+          DEPLOY_NAME=release-$CURRENT_DATE-$SHORT_SHA
+          echo "DEPLOY_NAME=$DEPLOY_NAME" >> $GITHUB_ENV
+          PATH="${{ vars.DEPLOY_PATH }}"
+          BRANCH=${GITHUB_REF##*/}
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+          # Set PW_ROOT variable (default to 'public' if not set)
+          echo "PW_ROOT=${{ env.PW_ROOT }}" >> $GITHUB_ENV
+          echo "DEPLOY_FOLDER=${{ env.DEPLOY_PATH }}/tmp-$DEPLOY_NAME" >> $GITHUB_ENV
+          echo "SRC=${{ github.workspace }}" >> $GITHUB_ENV
+          echo "BRANCH: $BRANCH"
+          echo "DEPLOY_PATH: ${{ env.DEPLOY_PATH }}"
+          echo "PW_ROOT: ${{ env.PW_ROOT }}"
+          echo "SSH_USER: ${{ vars.SSH_USER }}"
+          echo "SSH_HOST: ${{ vars.SSH_HOST }}"
+          echo "SUBMODULES: ${{ env.SUBMODULES }}"
+
+      - name: 🕵 Setup SSH
+        run: |
+          install -m 600 -D /dev/null ~/.ssh/id_rsa
+          echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
+          echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+
+      - name: 🚚 Deploy via RSYNC and Set Permissions
+        run: |
+          ssh ${{ vars.SSH_USER }}@${{ vars.SSH_HOST }} -p22 "mkdir -p ${{ env.DEPLOY_FOLDER }}"
+          rsync -avz --exclude '.git' --chmod=D755,F644 ${{ env.SRC }}/${{ env.PW_ROOT }}/ ${{ vars.SSH_USER }}@${{ vars.SSH_HOST }}:${{ env.DEPLOY_FOLDER }}
+
+      - name: 🐘 Get PHP Command
+        id: get-php
+        run: |
+          if [ -z "${{ env.PHP_COMMAND }}" ]; then
+            PHP_COMMAND=$(ssh ${{ vars.SSH_USER }}@${{ vars.SSH_HOST }} -p22 "${{ env.GET_PHP_COMMAND }} ${{ env.DEPLOY_FOLDER }}/site/modules/RockMigrations/get-php.php")
+          else
+            PHP_COMMAND="${{ env.PHP_COMMAND }}"
+          fi
+          echo "PHP_COMMAND=$PHP_COMMAND" >> $GITHUB_ENV
+          echo "PHP Command: $PHP_COMMAND"
+
+      - name: 🌟 Trigger RockMigrations Deployment
+        run: |
+          ssh ${{ vars.SSH_USER }}@${{ vars.SSH_HOST }} -p22 "$PHP_COMMAND ${{ env.DEPLOY_FOLDER }}/site/modules/RockMigrations/deploy.php ${{ env.BRANCH }}"

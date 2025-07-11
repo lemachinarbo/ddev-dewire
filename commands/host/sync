@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+#ddev-generated
+## Description: Sync files to the selected environment's server using rsync and environment-prefixed variables
+## Usage: sync [ENV]
+
+set -euo pipefail
+trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
+
+# Source common logging/colors and helpers
+source "$(dirname "$0")/lib/common.sh"
+
+ROCKSHELL_PATH="$DDEV_APPROOT/RockShell"
+
+if [ ! -f "$ENV_FILE" ]; then
+    log_warn ".env file not found at $ENV_FILE"
+    exit 1
+fi
+
+ENVIRONMENTS=$(get_env_environments)
+if [ -z "$ENVIRONMENTS" ]; then
+    log_error "No ENVIRONMENTS variable found in $ENV_FILE"
+    exit 1
+fi
+resolve_environment "${1:-}" "$ENVIRONMENTS"
+ENV="$SELECTED_ENV"
+PREFIX="${ENV}_"
+ENV_LOWER=$(echo "$ENV" | tr '[:upper:]' '[:lower:]')
+
+SSH_KEY_NAME="$(get_env_var "" SSH_KEY "$ENV_FILE")"
+if [ -z "$SSH_KEY_NAME" ]; then
+    SSH_KEY_NAME="id_github"
+fi
+SSH_KEY_PATH="$HOME/.ssh/$SSH_KEY_NAME"
+REMOTE_USER="$(get_env_var "$PREFIX" SSH_USER "$ENV_FILE")"
+REMOTE_HOST="$(get_env_var "$PREFIX" SSH_HOST "$ENV_FILE")"
+REMOTE_PATH="$(get_env_var "$PREFIX" PATH "$ENV_FILE")"
+REMOTE_USER_HOST="$REMOTE_USER@$REMOTE_HOST"
+PW_ROOT="$(get_env_var "" PW_ROOT "$ENV_FILE")"
+HTACCESS_OPTION="$(get_env_var "$PREFIX" HTACCESS_OPTION "$ENV_FILE")"
+
+log_info "PW_ROOT resolved to: $PW_ROOT"
+
+if [ -z "$REMOTE_USER" ] || [ -z "$REMOTE_HOST" ] || [ -z "$REMOTE_PATH" ]; then
+    log_error "Missing SSH_USER, SSH_HOST, or PATH for environment $ENV. Check your .env file."
+    exit 1
+fi
+
+log_info "Deploying to remote server..."
+log_info "Using SSH key: $SSH_KEY_PATH"
+log_info "Deploying to: $REMOTE_USER_HOST:$REMOTE_PATH"
+
+if [ ! -d "$PW_ROOT" ]; then
+    log_error "Source directory PW_ROOT ('$PW_ROOT') does not exist. Aborting deployment."
+    exit 1
+fi
+if [ ! -d "$ROCKSHELL_PATH" ]; then
+    log_error "RockShell directory '$ROCKSHELL_PATH' does not exist. Aborting deployment."
+    exit 1
+fi
+
+HTACCESS_FILE="$PW_ROOT/.htaccess"
+if [ -f "$HTACCESS_FILE" ]; then
+    log_info "Ensuring correct .htaccess Options settings in $HTACCESS_FILE..."
+    sed -i -E 's/^[[:space:]]*[#]*[[:space:]]*Options[[:space:]]+\+FollowSymLinks/# Options +FollowSymLinks/I' "$HTACCESS_FILE"
+    sed -i -E 's/^[[:space:]]*[#]*[[:space:]]*Options[[:space:]]+\+SymLinks[Ii]fOwnerMatch/# Options +SymLinksIfOwnerMatch/I' "$HTACCESS_FILE"
+    if [[ "${HTACCESS_OPTION,,}" == "followsymlinks" ]]; then
+        sed -i -E 's/^# Options[[:space:]]+\+FollowSymLinks/Options +FollowSymLinks/I' "$HTACCESS_FILE"
+        log_ok ".htaccess set to: Options +FollowSymLinks"
+    elif [[ "${HTACCESS_OPTION,,}" == "symlinksifownermatch" ]]; then
+        sed -i -E 's/^# Options[[:space:]]+\+SymLinks[Ii]fOwnerMatch.*/Options +SymLinksIfOwnerMatch/' "$HTACCESS_FILE"
+        log_ok ".htaccess set to: Options +SymLinksIfOwnerMatch"
+    else
+        log_warn "Both Options directives in .htaccess are commented out (no override set)."
+    fi
+fi
+
+TMP_CONFIG_DIR="$DDEV_APPROOT/tmp_config_backup"
+mkdir -p "$TMP_CONFIG_DIR"
+log_info "Backing up all config-local-*.php, config-local.php, and config.php.bak..."
+for f in public/site/config-local-*.php public/site/config-local.php public/site/config.php.bak; do
+  if [ -f "$f" ]; then
+    mv "$f" "$TMP_CONFIG_DIR/" && log_ok "Moved $f to $TMP_CONFIG_DIR/"
+  fi
+
+done
+
+if [ -n "$ENV_LOWER" ] && [ -f "$TMP_CONFIG_DIR/config-local-$ENV_LOWER.php" ]; then
+  log_ok "Copying $TMP_CONFIG_DIR/config-local-$ENV_LOWER.php to public/site/config-local.php for upload."
+  cp "$TMP_CONFIG_DIR/config-local-$ENV_LOWER.php" "public/site/config-local.php"
+else
+  log_error "No environment config found for $ENV_LOWER. Skipping config-local.php upload."
+fi
+
+RSYNC_LOG="$APP_PATH/logs/rsync_errors.log"
+echo
+log_info "Starting rsync deployment..."
+rsync -avz --omit-dir-times --delete -e "ssh -i $SSH_KEY_PATH" \
+  --exclude='.git' \
+  --exclude='.env' \
+  --exclude='tmp_config_backup/' \
+  --chmod=D775,F644 \
+  "$PW_ROOT/" RockShell "$REMOTE_USER_HOST:$REMOTE_PATH" 2>$RSYNC_LOG
+
+rm -f public/site/config-local.php && log_ok "Removed temporary config-local.php after upload."
+mv "$TMP_CONFIG_DIR"/* public/site/ 2>/dev/null && log_ok "Restored original config files from backup." || true
+rmdir "$TMP_CONFIG_DIR"
+RSYNC_EXIT_CODE=$?
+echo
+if [ $RSYNC_EXIT_CODE -eq 0 ]; then
+    log_ok "Deployment completed successfully."
+else
+    log_error "Deployment failed! Rsync exited with code $RSYNC_EXIT_CODE."
+    if grep -q 'No such file or directory' "$RSYNC_LOG"; then
+        log_error "Error: One or more source or destination directories do not exist. Check your PW_ROOT, RockShell folder, and DEPLOY_PATH settings."
+    elif grep -q 'Permission denied' "$RSYNC_LOG"; then
+        log_error "Error: Permission denied. Check your SSH credentials, key permissions, and server access."
+    else
+        log_error "Please check your SSH credentials, permissions, server status, and source/destination directories, then fix any issues and run the script again."
+    fi
+    log_error "See $RSYNC_LOG for details on what went wrong."
+    exit 1
+fi

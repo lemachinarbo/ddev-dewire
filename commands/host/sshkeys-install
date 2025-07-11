@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+#ddev-generated
+## Description: Register personal and project SSH keys on a remote server and test authentication
+## Usage: sshkeys-install [ENV]
+
+set -eu
+trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
+
+# Source common logging/colors and helpers
+source "$(dirname "$0")/lib/common.sh"
+
+SSH_DIR="$HOME/.ssh"
+PERSONAL_KEY="$SSH_DIR/id_ed25519"
+PROJECT_KEY="$SSH_DIR/id_github"
+
+is_key_installed() {
+  local pubkey_file="$1"
+  local key_label="$2"
+  if [ ! -f "$pubkey_file" ]; then
+    log_warn "$key_label public key not found."
+    return 1
+  fi
+  local pubkey_content
+  pubkey_content=$(cat "$pubkey_file")
+  if ssh "$SERVER" "grep -qF '$pubkey_content' ~/.ssh/authorized_keys 2>/dev/null"; then
+    log_warn "$key_label ssh key already installed. Skipping installation."
+    return 0
+  else
+    return 1
+  fi
+}
+
+install_key() {
+  local key_label="$1"
+  local key_path="$2"
+  local pubkey_file="${key_path}.pub"
+  if is_key_installed "$pubkey_file" "$key_label"; then
+    return
+  fi
+  log_info "Installing $key_label public key on $SERVER..."
+  if ssh-copy-id -i "$pubkey_file" "$SERVER"; then
+    log_ok "$key_label ssh key installed on $SERVER."
+  else
+    log_error "Failed to install $key_label ssh key on $SERVER."
+  fi
+}
+
+test_key_auth() {
+  local key_label="$1"
+  local key_path="$2"
+  log_info "Testing $key_label key authentication..."
+  if ssh -i "$key_path" -o BatchMode=yes -o ConnectTimeout=5 "$SERVER" true; then
+    log_ok "$key_label key authentication successful."
+  else
+    log_error "$key_label key authentication failed."
+  fi
+}
+
+main() {
+  if [ ! -f "$ENV_FILE" ]; then
+    log_warn ".env file not found at $ENV_FILE"
+    exit 1
+  fi
+
+  local ENVIRONMENTS ENV
+  ENVIRONMENTS=$(get_env_environments)
+  if [ -z "$ENVIRONMENTS" ]; then
+    log_error "No ENVIRONMENTS variable found in $ENV_FILE"
+    exit 1
+  fi
+  resolve_environment "${1:-}" "$ENVIRONMENTS"
+  ENV="$SELECTED_ENV"
+  PREFIX="${ENV}_"
+  SSH_USER="$(get_env_var "$PREFIX" SSH_USER "$ENV_FILE")"
+  SSH_HOST="$(get_env_var "$PREFIX" SSH_HOST "$ENV_FILE")"
+  SERVER="$SSH_USER@$SSH_HOST"
+
+  local KEYS=("$PERSONAL_KEY" "$PROJECT_KEY")
+  local LABELS=("Personal" "Project")
+
+  echo
+  log_info "Installing ssh keys ..."
+
+  for i in "${!KEYS[@]}"; do
+    install_key "${LABELS[$i]}" "${KEYS[$i]}"
+  done
+
+  echo
+  for i in "${!KEYS[@]}"; do
+    test_key_auth "${LABELS[$i]}" "${KEYS[$i]}"
+  done
+}
+
+main "$@"

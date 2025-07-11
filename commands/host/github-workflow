@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+#ddev-generated
+## Description: Generates GitHub Actions workflow YAMLs for each environment/branch pair
+## Usage: github-workflow [ENV]
+
+set -euo pipefail
+trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
+
+# Source common logging/colors and helpers
+source "$(dirname "$0")/lib/common.sh"
+
+WORKFLOWS_DIR="$DDEV_APPROOT/github/workflows"
+mkdir -p "$WORKFLOWS_DIR"
+
+# Load environments and repo info from .env
+if [ ! -f "$ENV_FILE" ]; then
+    log_error ".env file not found at $ENV_FILE. Aborting."
+    exit 1
+fi
+
+ENVIRONMENTS=$(get_env_environments)
+if [ -z "$ENVIRONMENTS" ]; then
+    log_error "No ENVIRONMENTS variable found in $ENV_FILE."
+    exit 1
+fi
+GITHUB_OWNER="$(get_env_var "" GITHUB_OWNER "$ENV_FILE")"
+GITHUB_REPO="$(get_env_var "" GITHUB_REPO "$ENV_FILE")"
+if [ -z "$GITHUB_OWNER" ] || [ -z "$GITHUB_REPO" ]; then
+    log_error "GITHUB_OWNER or GITHUB_REPO not set in .env."
+    exit 1
+fi
+
+REPO_FULL="$GITHUB_OWNER/$GITHUB_REPO"
+if ! gh repo view "$REPO_FULL" >/dev/null 2>&1; then
+    log_error "Repository $REPO_FULL not found or you do not have access. Please check your .env file, repo visibility, and GitHub permissions."
+    exit 1
+fi
+
+BRANCHES=($(gh api repos/$GITHUB_OWNER/$GITHUB_REPO/branches --jq '.[].name'))
+if [ ${#BRANCHES[@]} -eq 0 ]; then
+    log_fatal "Repository $GITHUB_OWNER/$GITHUB_REPO has no branches. Please create a main branch and push it to GitHub before running this script."
+    exit 1
+fi
+
+resolve_environment "${1:-}" "$ENVIRONMENTS"
+ENV="$SELECTED_ENV"
+
+log_info "\nAvailable branches in $GITHUB_REPO (fetched from remote):"
+for i in "${!BRANCHES[@]}"; do
+    printf "    %d) %s\n" "$((i+1))" "${BRANCHES[$i]}"
+done
+printf "    %d) Create new branch...\n" "$(( ${#BRANCHES[@]} + 1 ))"
+log_ask "Select the branch to link to $ENV [1]: "
+read branch_choice
+branch_choice=${branch_choice:-1}
+if [[ "$branch_choice" =~ ^[0-9]+$ ]] && (( branch_choice >= 1 && branch_choice <= $((${#BRANCHES[@]}+1)) )); then
+    if (( branch_choice == ${#BRANCHES[@]} + 1 )); then
+        log_ask "Enter the new branch name for $ENV: "
+        read NEW_BRANCH
+        NEW_BRANCH=${NEW_BRANCH// /-}
+        log_ask "Base new branch on which existing branch? (default: main): "
+        read BASE_BRANCH
+        BASE_BRANCH=${BASE_BRANCH:-main}
+        BASE_SHA=$(gh api repos/$GITHUB_OWNER/$GITHUB_REPO/branches/$BASE_BRANCH --jq .commit.sha)
+        gh api -X POST repos/$GITHUB_OWNER/$GITHUB_REPO/git/refs -f ref="refs/heads/$NEW_BRANCH" -f sha="$BASE_SHA" >/dev/null 2>&1
+        if git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git remote get-url origin >/dev/null 2>&1; then
+            git fetch origin "$NEW_BRANCH:$NEW_BRANCH" 2>/dev/null
+            log_ok "Branch '$NEW_BRANCH' created on remote and fetched locally."
+            log_info "To start working on it, run: git checkout $NEW_BRANCH"
+        fi
+        BRANCH="$NEW_BRANCH"
+    else
+        BRANCH="${BRANCHES[$((branch_choice-1))]}"
+    fi
+else
+    log_error "Invalid selection. Exiting."
+    exit 1
+fi
+
+TEMPLATE_FILE="$APP_PATH/workflows/workflow.template.yaml"
+WORKFLOW_FILE="$WORKFLOWS_DIR/${ENV,,}.yaml"
+if [ ! -f "$TEMPLATE_FILE" ]; then
+    log_error "Workflow template $TEMPLATE_FILE not found."
+    exit 1
+fi
+sed \
+    -e "s|main|$BRANCH|g" \
+    -e "s|Deploy|Deploy $ENV|g" \
+    -e "s|environment.name|$ENV|g" \
+    "$TEMPLATE_FILE" > "$WORKFLOW_FILE"
+log_ok "Workflow for $ENV created at $WORKFLOW_FILE (triggers on branch: $BRANCH)"

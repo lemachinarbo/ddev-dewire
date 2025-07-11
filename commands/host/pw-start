@@ -19,6 +19,8 @@ if command -v ddev >/dev/null 2>&1; then
   log_ok 'webserver_type set to apache-fpm.'
 fi
 
+TEMPLATES_PATH="$APP_PATH/templates"
+
 main() {
   echo
   log_header "Init git & copy Composer template ..."
@@ -34,18 +36,18 @@ main() {
     fi
   fi
   # Copy .gitignore template to project root if it exists
-  if [ -f .ddev/compwser/templates/.gitignore.example ]; then
-    cp .ddev/compwser/templates/.gitignore.example .gitignore
+  if [ -f "$TEMPLATES_PATH/.gitignore.example" ]; then
+    cp "$TEMPLATES_PATH/.gitignore.example" .gitignore
     log_ok '.gitignore template copied to project root.'
   else
-    log_warn '.gitignore template not found in .ddev/compwser/templates/'
+    log_warn '.gitignore template not found in $TEMPLATES_PATH/'
   fi
   # Copy composer.json template to project root if it exists
-  if [ -f .ddev/compwser/templates/composer.template.json ]; then
-    cp .ddev/compwser/templates/composer.template.json composer.json
+  if [ -f "$TEMPLATES_PATH/composer.template.json" ]; then
+    cp "$TEMPLATES_PATH/composer.template.json" composer.json
     log_ok 'composer.json template copied to project root.'
   else
-    log_warn 'composer.template.json template not found in .ddev/compwser/templates/'
+    log_warn 'composer.template.json template not found in $TEMPLATES_PATH/'
   fi
 
   install_rockshell
