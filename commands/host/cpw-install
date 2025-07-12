@@ -1,0 +1,210 @@
+#!/usr/bin/env bash
+#ddev-generated
+## Description: Install and bootstrap ProcessWire project
+## Usage: cpw-install
+
+set -eu
+trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
+
+# Source common logging/colors and helpers
+source "$(dirname "$0")/lib/common.sh"
+
+main() {
+    update_ddev_config
+    copy_files
+    install_rockshell
+    install_processwire
+    install_rockmigrations
+    backup_database
+    cleanup_pw_files
+    ddev_restart
+    status_complete
+}
+
+update_ddev_config() {
+    log_header "Updating DDEV config..."
+    # Ensure .ddev/config.yaml has docroot: public and webserver_type: apache-fpm using ddev config
+    if command -v ddev >/dev/null 2>&1; then
+        ddev config --docroot=public --webserver-type=apache-fpm
+        log_ok 'docroot set to public.'
+        log_ok 'webserver_type set to apache-fpm.'
+    fi
+}
+
+TEMPLATES_PATH="$APP_PATH/templates"
+
+copy_templates() {
+    # Init git if not already initialized
+    if [ -d .git ]; then
+        log_warn 'Git repository already initialized.'
+    else
+        if git init --initial-branch=main; then
+            log_ok 'Git repository initialized.'
+        else
+            log_error 'Failed to initialize git repository.'
+            exit 1
+        fi
+    fi
+    # Copy .gitignore template to project root if it exists
+    if [ -f "$TEMPLATES_PATH/.gitignore.example" ]; then
+        cp "$TEMPLATES_PATH/.gitignore.example" .gitignore
+        log_ok '.gitignore template copied to project root.'
+    else
+        log_warn '.gitignore template not found in $TEMPLATES_PATH/'
+    fi
+    # Copy composer.json template to project root if it exists
+    if [ -f "$TEMPLATES_PATH/composer.template.json" ]; then
+        cp "$TEMPLATES_PATH/composer.template.json" composer.json
+        log_ok 'composer.json template copied to project root.'
+    else
+        log_warn 'composer.template.json template not found in $TEMPLATES_PATH/'
+    fi
+}
+
+copy_env_file() {
+    # Create .env file from template if it does not exist
+    local env_file=".env"
+    local example_file="$TEMPLATES_PATH/.env.example"
+    if [ ! -f "$env_file" ]; then
+        if [ -f "$example_file" ]; then
+            cp "$example_file" "$env_file"
+            log_ok ".env file created from template."
+        else
+            log_error ".env.example template not found at $example_file. Cannot create .env file."
+        fi
+    fi
+}
+
+copy_files() {
+    log_header "Init git & copy templates..."
+    copy_templates
+    copy_env_file
+}
+
+add_submodule() {
+    # Add a git submodule
+    # Usage: add_submodule <url> <path>
+    local url="$1"
+    local path="$2"
+    if git config --file .gitmodules --get-regexp path | grep -q "^[^ ]* $path$"; then
+        log_warn "$path submodule already registered."
+    elif [ -d "$path" ]; then
+        log_warn "$path directory exists but is not a registered submodule. Please resolve manually if you encounter issues."
+    else
+        if git submodule add -b dev "$url" "$path"; then
+            log_ok "$path submodule added."
+        else
+            log_fatal "Failed to add $path submodule."
+            exit 1
+        fi
+    fi
+}
+
+install_rockshell() {
+    # Install RockShell submodule
+    log_header "Installing RockShell..."
+    add_submodule "https://github.com/lemachinarbo/RockShell.git" "RockShell"
+    git submodule update --init --recursive || {
+        log_fatal 'Failed to update submodules.'
+        exit 1
+    }
+    if [ ! -f RockShell/rock ]; then
+        log_fatal 'RockShell/rock is not present.'
+        exit 1
+    fi
+}
+
+install_processwire() {
+    # Install ProcessWire via RockShell
+    log_header "Installing ProcessWire..."
+    if (ddev rs pw:installer --lazy); then
+        log_ok 'ProcessWire installed via RockShell.'
+    else
+        log_error 'Failed to install ProcessWire via RockShell.'
+        exit 1
+    fi
+}
+
+install_rockmigrations() {
+    # Install RockMigrations submodule
+    log_header "Installing RockMigrations..."
+    add_submodule "https://github.com/lemachinarbo/RockMigrations.git" "public/site/modules/RockMigrations"
+    git submodule update --init --recursive || {
+        log_error 'Failed to update submodules.'
+        exit 1
+    }
+    if (ddev rs module:install -m RockMigrations); then
+        log_ok 'RockMigrations module installed.'
+    else
+        log_warn 'Failed to install RockMigrations module.'
+    fi
+    if (ddev rs pw:refresh); then
+        log_ok 'Modules refreshed.'
+    else
+        log_warn 'Failed to refresh modules.'
+    fi
+}
+
+backup_database() {
+    # Backup the database
+    log_header "Backing up database..."
+    if (ddev rs db:dump); then
+        log_ok 'Database dump complete.'
+    else
+        log_warn 'Failed to dump database.'
+    fi
+}
+
+cleanup_pw_files() {
+    # Clean up ProcessWire files
+    log_header "Cleaning up ProcessWire files..."
+    if [ -d ./public/site/modules/RockMigrations ]; then
+        pushd ./public/site/modules/RockMigrations >/dev/null || {
+            log_warn 'Could not enter RockMigrations directory for cleanup.'
+            return
+        }
+        git reset --hard
+        git clean -fdx
+        popd >/dev/null
+    else
+        log_warn 'RockMigrations submodule not present, skipping clean/reset'
+    fi
+    if [ -f public/README.md ]; then
+        rm public/README.md && log_ok 'public/README.md deleted.'
+    else
+        log_warn 'README.md not found'
+    fi
+
+    if [ -f public/CONTRIBUTING.md ]; then
+        rm public/CONTRIBUTING.md && log_ok 'public/CONTRIBUTING.md deleted.'
+    else
+        log_warn 'CONTRIBUTING.md not found'
+    fi
+
+    if [ -f public/LICENSE.TXT ]; then
+        rm public/LICENSE.TXT && log_ok 'public/LICENSE.TXT deleted.'
+    else
+        log_warn 'LICENSE.TXT not found'
+    fi
+
+    if [ -f public/composer.json ]; then
+        rm public/composer.json && log_ok 'public/composer.json deleted.'
+    else
+        log_warn 'ProcessWire composer.json not found'
+    fi
+    log_ok 'ProcessWire cleanup complete.'
+}
+
+ddev_restart() {
+    log_header 'Restarting DDEV...'
+    ddev restart
+}
+
+status_complete() {
+    log_header 'Processwire installation completed!'
+    log_info "The ProcessWire project has been set up successfully and is ready to use."
+    log_info "To enable workflow deployment, remember to update the .env file and then run 'ddev cpw-deploy'."
+    echo
+}
+
+main "$@"
