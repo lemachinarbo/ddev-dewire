@@ -60,8 +60,12 @@ select_branch() {
     done
     printf "    %d) Create new branch...\n" "$(( ${#BRANCHES[@]} + 1 ))"
     log_ask "Select the branch to link to $ENV [1]: "
-    read branch_choice
-    branch_choice=${branch_choice:-1}
+    # If running in a non-interactive shell, default to the first branch
+    if read branch_choice; then
+      branch_choice=${branch_choice:-1}
+    else
+      branch_choice=1
+    fi
     if [[ "$branch_choice" =~ ^[0-9]+$ ]] && (( branch_choice >= 1 && branch_choice <= $((${#BRANCHES[@]}+1)) )); then
         if (( branch_choice == ${#BRANCHES[@]} + 1 )); then
             log_ask "Enter the new branch name for $ENV: "

@@ -117,7 +117,11 @@ install_rockshell() {
 install_processwire() {
     # Install ProcessWire via RockShell
     log_header "Installing ProcessWire..."
-    if (ddev rs pw:installer --lazy); then
+    if [ -f public/index.php ] || [ -f public/site/config.php ]; then
+        log_warn "ProcessWire already appears to be installed (public/index.php or public/site/config.php found). Skipping installation."
+        return 0
+    fi
+    if ddev rs pw:installer --lazy; then
         log_ok 'ProcessWire installed via RockShell.'
     else
         log_error 'Failed to install ProcessWire via RockShell.'

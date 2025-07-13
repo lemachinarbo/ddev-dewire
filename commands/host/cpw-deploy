@@ -9,12 +9,30 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 # Source common logging/colors and helpers
 source "$(dirname "$0")/lib/common.sh"
 
+for arg in "$@"; do
+  if [[ "$arg" == "--lazy" ]]; then
+    LAZY_MODE=true
+  fi
+  # Remove --lazy from positional args
+  if [[ "$arg" == "--lazy" ]]; then
+    set -- "${@/--lazy/}"
+  fi
+  break
+done    
+
+default_answer() {
+  local prompt="$1"
+  local default="$2"
+  echo "$prompt" "$default"
+}
+
 main() {
     log_header "Welcome to the ComPWser Environment Setup tool"
     log_info "This script will guide you through setting up your environment for automated deployments."
     check_requirements
     setup_env_vars "$@"
     setup_ssh_keys
+    check_git_remote_and_branch
     setup_github_actions
     setup_github_workflows
     setup_config_files
@@ -44,6 +62,45 @@ check_requirements(){
     log_success "All requirements met. Let's start environment setup.\n"
 }
 
+check_git_remote_and_branch() {
+    REMOTE_URL="git@github.com:$GITHUB_OWNER/$GITHUB_REPO.git"
+    log_header "Git Repository Initialization"
+    log_info "Setting git remote and initializing repository if needed."
+    ask_user "Initialize remote repository? [Y/n]: "
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        if ! git remote get-url origin >/dev/null 2>&1; then
+            git remote add origin "$REMOTE_URL"
+        else
+            git remote set-url origin "$REMOTE_URL"
+            log_info "Remote 'origin' already exists. Set to SSH URL."
+        fi
+        git fetch origin main >/dev/null 2>&1 || true
+        # Check if remote branch exists, create if missing
+        if [ "$(git ls-remote origin main | wc -l)" -eq 0 ]; then
+            log_info "Remote 'main' branch is empty or missing. Initializing with an empty commit."
+            git commit --allow-empty -m "Initial commit"
+            if ! ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+                log_warn "SSH authentication to GitHub failed. Attempting to add your public key automatically..."
+                if gh ssh-key add "$HOME/.ssh/id_ed25519.pub" --title "Github deployment key"; then
+                    log_ok "SSH key added to your GitHub account."
+                else
+                    log_error "Failed to add SSH key automatically. Please add it manually at: https://github.com/settings/ssh/new"
+                fi
+            fi
+            git push -u origin main
+        else
+            log_warn "Remote 'main' branch has content."
+            # Check if local branch is tracking remote
+            if ! git rev-parse --abbrev-ref --symbolic-full-name @{u} >/dev/null 2>&1; then
+                git branch --set-upstream-to=origin/main main
+                log_info "Set local branch 'main' to track 'origin/main'."
+            fi
+        fi
+    else
+        log_warn "Skipped git remote setup and repository initialization. You may encounter authentication issues or workflow errors until the remote is initialized."
+    fi
+}
+
 
 setup_env_vars() {
     ENVIRONMENTS=$(get_env_environments)
@@ -66,10 +123,8 @@ setup_env_vars() {
 setup_ssh_keys() {
     log_header "Installing SSH Keys"
     log_info "Allows automated deployments with passwordless SSH access."
-    log_ask "Install keys now? [Y/n]: "
-    read yn0
-    yn0=${yn0:-y}
-    if [[ $yn0 =~ ^[Yy]$ ]]; then
+    ask_user "Install keys now? [Y/n]: "
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
         ddev cpw-sshkeys-install "$ENV" && log_success "SSH key installation and authentication test complete." || { log_error "SSH key installation failed!"; exit 1; }
     else
         log_warn "Skipping SSH key installation."
@@ -79,10 +134,8 @@ setup_ssh_keys() {
 setup_github_actions() {
     log_header "GitHub Actions Setup"
     log_info "Automated deployment requires secrets and variables set in the GitHub $ENV environment"
-    log_ask "Run GitHub Actions setup? [Y/n]: "
-    read yn1
-    yn1=${yn1:-y}
-    if [[ $yn1 =~ ^[Yy]$ ]]; then
+    ask_user "Run GitHub Actions setup? [Y/n]: "
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
         ddev cpw-gh-env "$ENV" && log_success "All GitHub Actions variables and secrets have been processed successfully." || { log_error "GitHub setup failed!"; exit 1; }
     else
         log_warn "Skipping GitHub Actions setup."
@@ -92,10 +145,8 @@ setup_github_actions() {
 setup_github_workflows() {
     log_header "GitHub Workflows Setup"
     log_info "To trigger automated deployments, link a branch to the $ENV environment in GitHub."
-    log_ask "Select branch now? [Y/n]: "
-    read yn1_5
-    yn1_5=${yn1_5:-y}
-    if [[ $yn1_5 =~ ^[Yy]$ ]]; then
+    ask_user "Select branch now? [Y/n]: "
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
         ddev cpw-gh-workflow "$ENV" && log_success "GitHub Actions workflow files generated successfully." || { log_error "Workflow file generation failed!"; exit 1; }
     else
         log_warn "Skipping GitHub Actions workflow file generation."
@@ -105,10 +156,8 @@ setup_github_workflows() {
 setup_config_files() {
     log_header "Config File Setup"
     log_info "To separate local and production settings, your config.php will be split, creating a config-local.php for environment-specific overrides."
-    log_ask "Create config-local.php? [Y/n]: "
-    read yn2
-    yn2=${yn2:-y}
-    if [[ $yn2 =~ ^[Yy]$ ]]; then
+    ask_user "Create config-local.php? [Y/n]: "
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
         ddev cpw-config-split "$ENV" && log_success "config-local setup complete." || { log_error "config-local.php setup failed!"; exit 1; }
     else
         log_warn "Skipping config-local.php setup."
@@ -118,10 +167,8 @@ setup_config_files() {
 sync_files() {
     log_header "File Sync"
     log_info "To deploy your site, all project files need to be uploaded and synced to the $ENV server."
-    log_ask "Sync files and deploy to server? [Y/n]: "
-    read yn3
-    yn3=${yn3:-y}
-    if [[ $yn3 =~ ^[Yy]$ ]]; then
+    ask_user "Sync files and deploy to server? [Y/n]: "
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
         ddev cpw-sync "$ENV" && log_ok "File sync complete." || { log_error "File sync failed!"; exit 1; }
     else
         log_warn "Skipping file sync."
@@ -131,16 +178,13 @@ sync_files() {
 import_database() {
     log_header "Database Import"
     log_info "Import local database to $ENV server to run the site."
-    log_ask "Import now? [Y/n]: "
-    read yn4
-    yn4=${yn4:-y}
-    if [[ $yn4 =~ ^[Yy]$ ]]; then
+    ask_user "Import now? [Y/n]: "
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
         if [ -z "$REMOTE_USER" ] || [ -z "$REMOTE_HOST" ] || [ -z "$REMOTE_PATH" ] || [ -z "$DB_NAME" ] || [ -z "$DB_USER" ] || [ -z "$DB_PASS" ]; then
             log_fatal "One or more required variables (SSH_USER, SSH_HOST, DEPLOY_PATH, DB_NAME, DB_USER, DB_PASS) are empty. Check your .env file for all required variables."
             exit 1
         fi
         ssh -i "$HOME/.ssh/id_github" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && mysql -u$DB_USER -p'$DB_PASS' $DB_NAME < site/assets/backups/database/db.sql" && log_ok "Database import complete." || log_error "Database import failed!"
-        # ssh -i "$HOME/.ssh/id_github" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH/$PW_PATH && mysql -u$DB_USER -p'$DB_PASS' $DB_NAME < site/assets/backups/database/db.sql" && log_ok "Database import complete." || log_error "Database import failed!"
     else
         log_warn "Skipping database import."
     fi
@@ -149,15 +193,12 @@ import_database() {
 update_folder_structure() {
     log_header "Environment Folder Structure"
     log_info "A new folder structure is required on the $ENV server for multi-version deployments."
-    log_ask "Update folder structure? [Y/n]: "
-    read yn5
-    yn5=${yn5:-y}
-    if [[ $yn5 =~ ^[Yy]$ ]]; then
+    ask_user "Update folder structure? [Y/n]: "
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
         if [ -z "$REMOTE_USER" ] || [ -z "$REMOTE_HOST" ] || [ -z "$REMOTE_PATH" ]; then
             log_fatal "One or more required variables (SSH_USER, SSH_HOST, DEPLOY_PATH) are empty. Check your .env file for ${ENV}_SSH_USER, ${ENV}_SSH_HOST, and ${ENV}_PATH."
             exit 1
         fi
-        # ssh -i "$HOME/.ssh/id_github" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH/$PW_PATH && php ../RockShell/rock rm:transform && find . -type d -exec chmod 755 {} \; && find . -type f -exec chmod 644 {} \;"
         ssh -i "$HOME/.ssh/id_github" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && php RockShell/rock rm:transform && find . -type d -exec chmod 755 {} \; && find . -type f -exec chmod 644 {} \;"
         log_ok "Server file structure updated and permissions set: directories=755, files=644."
     else
@@ -201,11 +242,6 @@ check_github_repo() {
             REQUIREMENTS_OK=false
         else
             log_ok "Repository $GITHUB_OWNER/$GITHUB_REPO found and accessible."
-            BRANCHES=($(gh api repos/$GITHUB_OWNER/$GITHUB_REPO/branches --jq '.[].name'))
-            if [ ${#BRANCHES[@]} -eq 0 ]; then
-                log_fatal "Repository $GITHUB_OWNER/$GITHUB_REPO has no branches. Please create a main branch and push it to GitHub before running this script."
-                REQUIREMENTS_OK=false
-            fi
         fi
     fi
 }

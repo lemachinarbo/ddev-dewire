@@ -169,7 +169,7 @@ create_local_config() {
 // Local config for development environment. Don't commit this file.
 EOF
         for VAR in "${VARS[@]}"; do
-            if [ -n "${VALUES[$VAR]}" ]; then
+            if [ -n "${VALUES[$VAR]+x}" ]; then
                 write_config_line "$VAR" "${VALUES[$VAR]}"
             fi
         done

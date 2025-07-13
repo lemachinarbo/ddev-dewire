@@ -2,6 +2,7 @@
 
 APP_DIR="compwser"
 APP_PATH="$DDEV_APPROOT/.ddev/$APP_DIR"
+: "${LAZY_MODE:=false}"
 
 export APP_PATH
 
@@ -9,6 +10,7 @@ export APP_PATH
 GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
+MAGENTA='\033[1;35m'
 NC='\033[0m' # No Color
 
 # Logging helpers
@@ -41,6 +43,14 @@ log_option() {
     local white="\033[1;37m"
     local nc="\033[0m"
     printf "    ${yellow}%d)${nc} ${white}%s${nc}\n" "$number" "$label"
+}
+
+log_step() {
+  echo -e "${MAGENTA}"
+  echo "========================================"
+  echo " $* "
+  echo "========================================"
+  echo -e "${NC}"
 }
 
 get_env_var() {
@@ -130,3 +140,18 @@ resolve_environment() {
         # log_info "Selected environment: $SELECTED_ENV"
     fi
 }
+
+ask_user() {
+  local prompt="$1"
+  local critical="${2:-false}"
+  if [ "$LAZY_MODE" = true ] && [ "$critical" = false ]; then
+    reply="y"
+    log_ask "$prompt y (auto)"
+  else
+    log_ask "$prompt"
+    read reply
+    reply=${reply:-y}
+  fi
+  REPLY="$reply"
+}
+

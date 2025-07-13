@@ -3,6 +3,7 @@ name: compwser
 project_files:
   - docker-compose.compwser.yaml
   - commands/host/lib/common.sh
+  - commands/host/compwser
   - commands/host/cpw-config-split
   - commands/host/cpw-gh-env
   - commands/host/cpw-gh-workflow
