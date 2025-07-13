@@ -84,3 +84,44 @@ teardown() {
   assert_success
   health_checks
 }
+
+@test "compwser command is available" {
+  # Check that the compwser command is available and outputs help text
+  run ddev compwser --help
+  assert_success
+  assert_output --partial "ComPWser"
+}
+
+@test "processwire is installed" {
+  # Check that ProcessWire is installed (index.php and config.php exist)
+  [ -f public/index.php ]
+  [ -f public/site/config.php ]
+}
+
+@test "deployment workflow file generated" {
+  # Check that a deployment workflow file is generated
+  [ -f .github/workflows/deploy.yml ]
+}
+
+@test "error handling: missing prerequisites" {
+  # Simulate missing .env and check for helpful error
+  mv .env .env.bak
+  run ddev compwser
+  assert_failure
+  assert_output --partial ".env file not found"
+  mv .env.bak .env
+}
+
+@test "cpw-install command runs" {
+  # Check that cpw-install command runs and outputs expected header
+  run ddev cpw-install --help
+  assert_success
+  assert_output --partial "Install and bootstrap ProcessWire"
+}
+
+@test "cpw-deploy command runs" {
+  # Check that cpw-deploy command runs and outputs expected header
+  run ddev cpw-deploy --help
+  assert_success
+  assert_output --partial "Orchestrates all setup and deployment steps"
+}
