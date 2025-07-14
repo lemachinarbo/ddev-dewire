@@ -19,13 +19,13 @@ DEFAULT_DOCROOT="public"
 
 main() {
     update_ddev_config
+    ddev_restart
     copy_files
     install_rockshell
     install_processwire
     install_rockmigrations
     backup_database
     cleanup_pw_files
-    ddev_restart
     status_complete
 }
 
@@ -132,14 +132,14 @@ install_processwire() {
         log_error "DDEV_DOCROOT is not set or does not exist: $DDEV_DOCROOT"
         exit 1
     fi
-    cd "$DDEV_DOCROOT"
-    log_info "ProcessWire will be installed in $(pwd)"
+    log_info "ProcessWire will be installed in $DDEV_DOCROOT"
 
     if [ -f index.php ] || [ -f site/config.php ]; then
         log_warn "ProcessWire already appears to be installed (index.php or site/config.php found). Skipping installation."
         return 0
     fi
-    if ddev exec bash -c "cd \$DDEV_DOCROOT && php ../RockShell/rock pw:installer --lazy"; then
+    #if ddev rs pw:installer --lazy; then
+    if ddev exec bash -c "cd $DDEV_DOCROOT && php ../RockShell/rock pw:installer --lazy"; then
         log_ok 'ProcessWire installed via RockShell.'
     else
         log_error 'Failed to install ProcessWire via RockShell.'
