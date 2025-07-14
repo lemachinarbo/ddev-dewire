@@ -23,7 +23,6 @@ Because downloading, installing ProcessWire, adding the modules, setting up the 
 
 ```bash
 ddev add-on get lemachinarbo/ddev-compwser
-ddev restart
 ```
 
 
