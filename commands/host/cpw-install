@@ -123,11 +123,18 @@ install_rockshell() {
 install_processwire() {
     # Install ProcessWire via RockShell
     log_header "Installing ProcessWire..."
-    if [ -f public/index.php ] || [ -f public/site/config.php ]; then
-        log_warn "ProcessWire already appears to be installed (public/index.php or public/site/config.php found). Skipping installation."
+    if [ -z "$DDEV_DOCROOT" ] || [ ! -d "$DDEV_DOCROOT" ]; then
+        log_error "DDEV_DOCROOT is not set or does not exist: $DDEV_DOCROOT"
+        exit 1
+    fi
+    cd "$DDEV_DOCROOT"
+    log_info "ProcessWire will be installed in $(pwd)"
+
+    if [ -f index.php ] || [ -f site/config.php ]; then
+        log_warn "ProcessWire already appears to be installed (index.php or site/config.php found). Skipping installation."
         return 0
     fi
-    if ddev rs pw:installer --lazy; then
+    if ddev exec bash -c "cd \$DDEV_DOCROOT && php ../RockShell/rock pw:installer --lazy"; then
         log_ok 'ProcessWire installed via RockShell.'
     else
         log_error 'Failed to install ProcessWire via RockShell.'
