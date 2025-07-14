@@ -97,7 +97,7 @@ teardown() {
 @test "compwser command is available" {
   run ddev compwser --help
   assert_success
-  assert_output --partial "ComPWser"
+  assert_output --partial "comPWser"
 }
 
 @test "cpw-install command runs" {

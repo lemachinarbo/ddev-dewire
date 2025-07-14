@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #ddev-generated
-## Description: Installs ProcessWire and sets up GitHub deployment workflows in one step
+## Description: Installs ProcessWire and automates publishing your site to production, staging, or dev with GitHub Actions
 ## Usage: compwser [ENV]
 
 set -euo pipefail
@@ -10,13 +10,13 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
-    echo "ComPWser: Installs ProcessWire and sets up GitHub deployment workflows in one step."
+    echo "comPWser: Installs ProcessWire and sets up GitHub deployment workflows in one step."
     echo "Usage: ddev compwser [ENV]"
     exit 0
 fi
 
 main() {
-    log_header "Welcome to ComPWser: Like composer but with PW!"
+    log_header "Welcome to comPWser: Like composer but with PW!"
     log_info "This will install ProcessWire and configure GitHub deployment workflows."
     log_info "Make sure you have filled out all prerequisites and have completed your .env file before continuing."
     ask_user "Run full setup now? [Y/n]: "

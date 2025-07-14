@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #ddev-generated
-## Description: Orchestrates all setup and deployment steps for ComPWser with user confirmation and environment selection
+## Description: Automate all setup and deployment steps for publishing your site to any environment
 ## Usage: cpw-deploy [ENV]
 
 set -euo pipefail
@@ -10,7 +10,7 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
-    echo "cpw-deploy: Orchestrates all setup and deployment steps for ComPWser."
+    echo "cpw-deploy: Orchestrates all setup and deployment steps for comPWser."
     echo "Usage: ddev cpw-deploy [ENV]"
     exit 0
 fi
@@ -33,7 +33,7 @@ default_answer() {
 }
 
 main() {
-    log_header "Welcome to the ComPWser Environment Setup tool"
+    log_header "Welcome to the comPWser Environment Setup tool"
     log_info "This script will guide you through setting up your environment for automated deployments."
     check_requirements
     setup_env_vars "$@"
