@@ -2,9 +2,6 @@
 # snippets
 .vscode
 
-# setup
-.build/
-
 # ignore vendors
 vendor/
 node_modules/

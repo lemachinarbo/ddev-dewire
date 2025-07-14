@@ -7,9 +7,6 @@
 
 A one-ddev-command setup to install [ProcessWire](https://github.com/processwire/processwire) and wire up GitHub deploys to staging, prod, testing, or dev.
 
-> Based on [RockMigrations deployments](https://www.baumrock.com/en/processwire/modules/rockmigrations/docs/deploy/#update-config.php) and following [processwire.dev structure](https://github.com/MoritzLost/ProcessWireDev/blob/master/site/02-setup-and-structure/02-integrate-composer-with-processwire.md).
-
-
 With comPWser you can do 3 things:
 1. [Download and Install Processwire](#1-just-install-processwire) with one command.
 2. Install Processwire and [deploy your site](#2-set-up-deployment) to production (or staging, testing, etc.), with… one command.
@@ -18,7 +15,7 @@ With comPWser you can do 3 things:
 
 ## Why?
 
-Because downloading, installing ProcessWire, adding the modules, setting up the repository, adding the actions, the secrets, the workflow… takes TIME. And, after reading the [RockMigrations Deployments guide](https://www.baumrock.com/en/processwire/modules/rockmigrations/docs/deploy/#update-config.php) I though: It will be so nice to have blank ProcessWire installation synced to my repository, my local machine, my staging server, and my production environment in a few minutes — without monkey-clicking around between installers and setup screens.
+Because downloading, installing ProcessWire, adding the modules, setting up the repository, adding the actions, the secrets, the workflow… takes TIME. And, after reading the [RockMigrations Deployments guide](https://www.baumrock.com/en/processwire/modules/rockmigrations/docs/deploy/#update-config.php) I though: It will be so nice to have a blank ProcessWire installation synced to my repository, my local machine, my staging server, and my production environment in a few minutes — without monkey-clicking around between installers and setup screens.
 (Being honest… I usually just have production… but now I can add staging and testing if I want!)
 
 
@@ -165,3 +162,4 @@ Nice. Time to enjoy some cake.
 
 - Contributed and maintained by [@lemachinarbo](https://github.com/lemachinarbo)
 - Inspired by the lovely modules created by [@BernhardBaumrock](https://github.com/BernhardBaumrock/)
+- Using [MoritzLost](https://github.com/moritzlost) [processwire.dev structure](https://github.com/MoritzLost/ProcessWireDev/blob/master/site/02-setup-and-structure/02-integrate-composer-with-processwire.md)
