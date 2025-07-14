@@ -9,6 +9,12 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 # Source common logging/colors and helpers
 source "$(dirname "$0")/lib/common.sh"
 
+if [[ "${1:-}" == "--help" ]]; then
+    echo "cpw-gh-env: Automates setup of GitHub Actions repository variables and secrets for deployment."
+    echo "Usage: ddev cpw-gh-env [ENV]"
+    exit 0
+fi
+
 main() {
     check_gh_cli
     check_gh_auth

@@ -9,6 +9,12 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 # Source common logging/colors and helpers
 source "$(dirname "$0")/lib/common.sh"
 
+if [[ "${1:-}" == "--help" ]]; then
+    echo "cpw-deploy: Orchestrates all setup and deployment steps for ComPWser."
+    echo "Usage: ddev cpw-deploy [ENV]"
+    exit 0
+fi
+
 for arg in "$@"; do
   if [[ "$arg" == "--lazy" ]]; then
     LAZY_MODE=true

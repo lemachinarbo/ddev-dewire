@@ -9,6 +9,12 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 # Source common logging/colors and helpers
 source "$(dirname "$0")/lib/common.sh"
 
+if [[ "${1:-}" == "--help" ]]; then
+    echo "cpw-gh-workflow: Generates GitHub Actions workflow YAMLs for each environment/branch pair."
+    echo "Usage: ddev cpw-gh-workflow [ENV]"
+    exit 0
+fi
+
 WORKFLOWS_DIR="$DDEV_APPROOT/github/workflows"
 
 main() {

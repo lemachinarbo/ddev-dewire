@@ -3,4 +3,11 @@
 ## Description: Run RockShell inside the web container
 ## Usage: rs [arguments]
 ## Example: "ddev rs" or "ddev rs pw:download"
+
+if [[ "${1:-}" == "--help" ]]; then
+    echo "rs: Run RockShell inside the web container."
+    echo "Usage: ddev rs [arguments]"
+    exit 0
+fi
+
 php /var/www/html/RockShell/rock "$@"

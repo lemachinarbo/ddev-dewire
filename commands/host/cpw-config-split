@@ -14,6 +14,12 @@ TMP_CONFIG="$CONFIG_MAIN.tmp"
 # Source common logging/colors and helpers
 source "$(dirname "$0")/lib/common.sh"
 
+if [[ "${1:-}" == "--help" ]]; then
+    echo "cpw-config-split: Split config.php into config-local.php for a selected environment."
+    echo "Usage: ddev cpw-config-split [ENV]"
+    exit 0
+fi
+
 main() {
     check_env_file_exists
     resolve_and_load_env_vars "$@"

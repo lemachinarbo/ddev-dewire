@@ -9,6 +9,12 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 # Source common logging/colors and helpers
 source "$(dirname "$0")/lib/common.sh"
 
+if [[ "${1:-}" == "--help" ]]; then
+    echo "cpw-sshkeys-install: Register personal and project SSH keys on a remote server and test authentication."
+    echo "Usage: ddev cpw-sshkeys-install [ENV]"
+    exit 0
+fi
+
 SSH_DIR="$HOME/.ssh"
 PERSONAL_KEY="$SSH_DIR/id_ed25519"
 PROJECT_KEY="$SSH_DIR/id_github"
