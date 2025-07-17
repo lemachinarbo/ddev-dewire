@@ -162,13 +162,13 @@ upload_github_secrets_and_vars() {
         log_error "Failed to set PW_ROOT"
         ERRORS=$((ERRORS + 1))
     }
+    gh variable set KNOWN_HOSTS --env "$ENV" --body "$KNOWN_HOSTS" --repo "$REPO_FULL" || {
+        log_error "Failed to set KNOWN_HOSTS"
+        ERRORS=$((ERRORS + 1))
+    }
     log_info "\nUploading environment secrets to GitHub environment '$ENV'..."
     NO_COLOR=1 gh secret set SSH_KEY --env "$ENV" --body "$SSH_KEY_CONTENT" --repo "$REPO_FULL" || {
         log_error "Failed to set SSH_KEY"
-        ERRORS=$((ERRORS + 1))
-    }
-    NO_COLOR=1 gh secret set KNOWN_HOSTS --env "$ENV" --body "$KNOWN_HOSTS" --repo "$REPO_FULL" || {
-        log_error "Failed to set KNOWN_HOSTS"
         ERRORS=$((ERRORS + 1))
     }
     if [ $ERRORS -eq 0 ]; then
