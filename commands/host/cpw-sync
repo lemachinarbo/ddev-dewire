@@ -63,6 +63,7 @@ check_source_directories() {
 }
 
 update_htaccess() {
+    echo
     HTACCESS_FILE="$PW_ROOT/.htaccess"
     if [ -f "$HTACCESS_FILE" ]; then
         log_info "Ensuring correct .htaccess Options settings in $HTACCESS_FILE..."
@@ -121,12 +122,18 @@ rsync_deploy() {
     RSYNC_LOG="$APP_PATH/logs/rsync_errors.log"
     echo
     log_info "Starting rsync deployment..."
+    RSYNC_EXCLUDES=(--exclude='.env' --exclude='tmp_config_backup/' --exclude='.deployignore')
+    # Add .deployignore if it exists
+    if [ -f "$DDEV_APPROOT/.deployignore" ]; then
+        RSYNC_EXCLUDES+=(--exclude-from="$DDEV_APPROOT/.deployignore")
+        log_ok "Excluding files and folders listed in .deployignore..."
+    fi
+    # Change to project root for rsync
+    cd "$DDEV_APPROOT"
     rsync -avz --omit-dir-times -e "ssh -i $SSH_KEY_PATH" \
-      --exclude='.git' \
-      --exclude='.env' \
-      --exclude='tmp_config_backup/' \
+      "${RSYNC_EXCLUDES[@]}" \
       --chmod=D775,F644 \
-        "$PW_ROOT/" RockShell "$REMOTE_USER_HOST:$REMOTE_PATH" 2>$RSYNC_LOG
+      . "$REMOTE_USER_HOST:$REMOTE_PATH" 2>$RSYNC_LOG
     RSYNC_EXIT_CODE=$?
     echo
     if [ $RSYNC_EXIT_CODE -eq 0 ]; then

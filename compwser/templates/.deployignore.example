@@ -1,0 +1,19 @@
+#ddev-generated
+# Patterns in this file follow rsync's matching rules:
+# - Patterns are relative to the project root (the directory you run rsync from).
+# - A pattern starting with '/' is anchored to the project root (e.g. '/vendor' matches only the root-level vendor).
+# - A pattern without '/' matches any directory or file with that name at any depth (e.g. 'vendor' matches vendor anywhere).
+# - A pattern ending with '/' matches directories only.
+# See: https://download.samba.org/pub/rsync/rsync.1#PATTERN_MATCHING_RULES
+
+# dev files
+.vscode
+.ddev
+
+# git files
+.git/
+.gitignore
+.gitmodules
+.github/
+.gitattributes
+
