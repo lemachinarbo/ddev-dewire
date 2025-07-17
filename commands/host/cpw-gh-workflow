@@ -15,7 +15,7 @@ if [[ "${1:-}" == "--help" ]]; then
     exit 0
 fi
 
-WORKFLOWS_DIR="$DDEV_APPROOT/github/workflows"
+WORKFLOWS_DIR="$DDEV_APPROOT/.github/workflows"
 
 main() {
     mkdir -p "$WORKFLOWS_DIR"
