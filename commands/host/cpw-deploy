@@ -223,7 +223,8 @@ check_env_placeholders() {
         "yourdomain.com"
     )
     for value in "${placeholders[@]}"; do
-        if grep -q "$value" "$env_file"; then
+        # Only check non-commented lines for placeholders
+        if grep -v '^#' "$env_file" | grep -q "$value"; then
             log_fatal ".env file contains default template value '$value'. Please update .env with your actual project/server info before continuing."
             exit 1
         fi
