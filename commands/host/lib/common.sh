@@ -155,3 +155,21 @@ ask_user() {
   REPLY="$reply"
 }
 
+# Compatibility helper functions for cross-platform support
+
+# OS detection
+is_macos() { [[ "$OSTYPE" == "darwin"* ]]; }
+
+# Compatible sed in-place editing
+sed_inplace() {
+    local pattern="$1" file="$2"
+    if is_macos; then 
+        sed -i '' "$pattern" "$file"
+    else 
+        sed -i "$pattern" "$file"
+    fi
+}
+
+# Compatible lowercase conversion
+to_lower() { echo "$1" | tr '[:upper:]' '[:lower:]'; }
+

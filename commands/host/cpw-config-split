@@ -74,7 +74,7 @@ generate_salt_if_missing() {
     if [ -z "$SALT_VALUE" ]; then
         NEW_SALT=$(openssl rand -base64 40)
         if grep -q "^${SALT_VAR}=" "$ENV_FILE"; then
-            sed -i "s|^${SALT_VAR}=.*|${SALT_VAR}=\"$NEW_SALT\"|" "$ENV_FILE"
+            sed_inplace "s|^${SALT_VAR}=.*|${SALT_VAR}=\"$NEW_SALT\"|" "$ENV_FILE"
         else
             awk -v prefix="$PREFIX" -v saltline="${SALT_VAR}=\"$NEW_SALT\"" '
         { lines[NR]=$0 }
@@ -115,13 +115,13 @@ ask_overwrite() {
 }
 
 create_deploy_config() {
-    ENV_LOWER=$(echo "$ENV" | tr '[:upper:]' '[:lower:]')
+    ENV_LOWER=$(to_lower "$ENV")
     DEPLOY_CONFIG="$SITE_DIR/config-local-$ENV_LOWER.php"
     DB_PORT=$(get_env_default DB_PORT 3306)
     DB_CHARSET=$(get_env_default DB_CHARSET utf8mb4)
     DB_ENGINE=$(get_env_default DB_ENGINE InnoDB)
     DB_DEBUG_RAW=$(get_env_default DEBUG false)
-    DB_DEBUG=$(echo "$DB_DEBUG_RAW" | tr '[:upper:]' '[:lower:]')
+    DB_DEBUG=$(to_lower "$DB_DEBUG_RAW")
     cat >"$DEPLOY_CONFIG" <<EOF
 <?php
 // This file is generated for deployment and should be uploaded/renamed on the server.
@@ -143,7 +143,10 @@ EOF
 
 create_local_config() {
     VARS=(dbHost dbName dbUser dbPass dbPort dbCharset dbEngine userAuthSalt httpHosts debug)
-    declare -A VALUES
+    # Use indexed arrays instead of associative arrays for bash 3.2+ compatibility
+    KEYS=()
+    VALUES=()
+    
     for VAR in "${VARS[@]}"; do
         VALUE=$(awk -v v="$VAR" '
       $0 ~ "\\$config->"v"[[:space:]]*= " {
@@ -166,18 +169,19 @@ create_local_config() {
         if [ -z "$VALUE" ]; then
             log_warn "Skipped: $VAR not found in config.php or config.php.bak"
         else
-            VALUES[$VAR]="$VALUE"
+            KEYS+=("$VAR")
+            VALUES+=("$VALUE")
         fi
     done
+    
     if [ "$SKIP_LOCAL_CONFIG" -eq 0 ]; then
         cat >"$LOCAL_CONFIG" <<EOF
 <?php
 // Local config for development environment. Don't commit this file.
 EOF
-        for VAR in "${VARS[@]}"; do
-            if [ -n "${VALUES[$VAR]+x}" ]; then
-                write_config_line "$VAR" "${VALUES[$VAR]}"
-            fi
+        # Process indexed arrays
+        for i in "${!KEYS[@]}"; do
+            write_config_line "${KEYS[$i]}" "${VALUES[$i]}"
         done
         log_ok "config-local.php was created for local development."
     fi

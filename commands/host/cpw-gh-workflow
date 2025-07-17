@@ -99,7 +99,7 @@ select_branch() {
 
 generate_workflow() {
     TEMPLATE_FILE="$APP_PATH/workflows/workflow.template.yaml"
-    WORKFLOW_FILE="$WORKFLOWS_DIR/${ENV,,}.yaml"
+    WORKFLOW_FILE="$WORKFLOWS_DIR/$(to_lower "$ENV").yaml"
     if [ ! -f "$TEMPLATE_FILE" ]; then
         log_error "Workflow template $TEMPLATE_FILE not found."
         exit 1

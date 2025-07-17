@@ -54,6 +54,7 @@ check_requirements(){
     echo
     log_info "Checking for requirements:"
     REQUIREMENTS_OK=true
+    check_bash_version
     get_github_env_vars
     check_env_file_exists
     check_env_placeholders
@@ -296,6 +297,15 @@ check_generate_ssh_keys_if_missing() {
             log_fatal "SSH key generation failed or keys still missing. Aborting."
             exit 1
         fi
+    fi
+}
+
+check_bash_version() {
+    local bash_version="${BASH_VERSION%%.*}"
+    if (( bash_version >= 4 )); then
+        log_ok "Bash $BASH_VERSION found (bash 4+ detected)."
+    else
+        log_warn "Bash $BASH_VERSION found (bash $bash_version detected) - running in compatibility mode, let's cross fingers! 🤞"
     fi
 }
 

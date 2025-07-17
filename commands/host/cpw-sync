@@ -37,7 +37,7 @@ load_env_vars() {
     resolve_environment "${1:-}" "$ENVIRONMENTS"
     ENV="$SELECTED_ENV"
     PREFIX="${ENV}_"
-    ENV_LOWER=$(echo "$ENV" | tr '[:upper:]' '[:lower:]')
+    ENV_LOWER=$(to_lower "$ENV")
     SSH_KEY_NAME="$(get_env_var "" SSH_KEY "$ENV_FILE")"
     if [ -z "$SSH_KEY_NAME" ]; then
         SSH_KEY_NAME="id_github"
@@ -68,23 +68,24 @@ update_htaccess() {
     if [ -f "$HTACCESS_FILE" ]; then
         log_info "Ensuring correct .htaccess Options settings in $HTACCESS_FILE..."
         NEED_HTACCESS_UPDATE=false
-        if [[ "${HTACCESS_OPTION,,}" == "followsymlinks" ]]; then
+        HTACCESS_OPTION_LOWER=$(to_lower "$HTACCESS_OPTION")
+        if [[ "$HTACCESS_OPTION_LOWER" == "followsymlinks" ]]; then
             if ! grep -q '^Options +FollowSymLinks' "$HTACCESS_FILE"; then
                 NEED_HTACCESS_UPDATE=true
             fi
-        elif [[ "${HTACCESS_OPTION,,}" == "symlinksifownermatch" ]]; then
+        elif [[ "$HTACCESS_OPTION_LOWER" == "symlinksifownermatch" ]]; then
             if ! grep -q '^Options +SymLinksIfOwnerMatch' "$HTACCESS_FILE"; then
                 NEED_HTACCESS_UPDATE=true
             fi
         fi
         if [ "$NEED_HTACCESS_UPDATE" = true ]; then
-            sed -i -E 's/^[[:space:]]*[#]*[[:space:]]*Options[[:space:]]+\+FollowSymLinks/# Options +FollowSymLinks/I' "$HTACCESS_FILE"
-            sed -i -E 's/^[[:space:]]*[#]*[[:space:]]*Options[[:space:]]+\+SymLinks[Ii]fOwnerMatch/# Options +SymLinksIfOwnerMatch/I' "$HTACCESS_FILE"
-            if [[ "${HTACCESS_OPTION,,}" == "followsymlinks" ]]; then
-                sed -i -E 's/^# Options[[:space:]]+\+FollowSymLinks/Options +FollowSymLinks/I' "$HTACCESS_FILE"
+            sed_inplace 's/^[[:space:]]*[#]*[[:space:]]*Options[[:space:]]+\+FollowSymLinks/# Options +FollowSymLinks/I' "$HTACCESS_FILE"
+            sed_inplace 's/^[[:space:]]*[#]*[[:space:]]*Options[[:space:]]+\+SymLinks[Ii]fOwnerMatch/# Options +SymLinksIfOwnerMatch/I' "$HTACCESS_FILE"
+            if [[ "$HTACCESS_OPTION_LOWER" == "followsymlinks" ]]; then
+                sed_inplace 's/^# Options[[:space:]]+\+FollowSymLinks/Options +FollowSymLinks/I' "$HTACCESS_FILE"
                 log_ok ".htaccess set to: Options +FollowSymLinks"
-            elif [[ "${HTACCESS_OPTION,,}" == "symlinksifownermatch" ]]; then
-                sed -i -E 's/^# Options[[:space:]]+\+SymLinks[Ii]fOwnerMatch.*/Options +SymLinksIfOwnerMatch/' "$HTACCESS_FILE"
+            elif [[ "$HTACCESS_OPTION_LOWER" == "symlinksifownermatch" ]]; then
+                sed_inplace 's/^# Options[[:space:]]+\+SymLinks[Ii]fOwnerMatch.*/Options +SymLinksIfOwnerMatch/' "$HTACCESS_FILE"
                 log_ok ".htaccess set to: Options +SymLinksIfOwnerMatch"
             else
                 log_warn "Both Options directives in .htaccess are commented out (no override set)."
@@ -132,7 +133,7 @@ rsync_deploy() {
     cd "$DDEV_APPROOT"
     rsync -avz --omit-dir-times -e "ssh -i $SSH_KEY_PATH" \
       "${RSYNC_EXCLUDES[@]}" \
-      --chmod=D775,F644 \
+      --chmod=755,644 \
       . "$REMOTE_USER_HOST:$REMOTE_PATH" 2>$RSYNC_LOG
     RSYNC_EXIT_CODE=$?
     echo
