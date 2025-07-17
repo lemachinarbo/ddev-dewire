@@ -190,7 +190,12 @@ import_database() {
             log_fatal "One or more required variables (SSH_USER, SSH_HOST, DEPLOY_PATH, DB_NAME, DB_USER, DB_PASS) are empty. Check your .env file for all required variables."
             exit 1
         fi
-        ssh -i "$HOME/.ssh/id_github" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && mysql -u$DB_USER -p'$DB_PASS' $DB_NAME < site/assets/backups/database/db.sql" && log_ok "Database import complete." || log_error "Database import failed!"
+        # Use PW_ROOT if set, else default to empty string
+        local pw_root="${PW_PATH:-}"
+        local db_sql_path="${pw_root:+$pw_root/}site/assets/backups/database/db.sql"
+        ssh -i "$HOME/.ssh/id_github" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && mysql -u$DB_USER -p'$DB_PASS' $DB_NAME < $db_sql_path" \
+            && log_ok "Local DB imported as '$DB_NAME' in $ENV environment ($REMOTE_HOST)." \
+            || log_error "Database import failed!"
     else
         log_warn "Skipping database import."
     fi
