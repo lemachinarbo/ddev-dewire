@@ -133,12 +133,24 @@ rsync_deploy() {
     cd "$DDEV_APPROOT"
     rsync -avz --omit-dir-times -e "ssh -i $SSH_KEY_PATH" \
       "${RSYNC_EXCLUDES[@]}" \
-      --chmod=755,644 \
-      . "$REMOTE_USER_HOST:$REMOTE_PATH" 2>$RSYNC_LOG
+      . "$REMOTE_USER_HOST:$REMOTE_PATH" 2>"$RSYNC_LOG"
     RSYNC_EXIT_CODE=$?
     echo
     if [ $RSYNC_EXIT_CODE -eq 0 ]; then
         log_ok "Deployment completed successfully."
+        
+        # Set proper permissions after deployment
+        log_info "Setting file permissions on remote server..."
+        if ssh -i "$SSH_KEY_PATH" "$REMOTE_USER_HOST" "find $REMOTE_PATH -type d -exec chmod 755 {} + && find $REMOTE_PATH -type f -exec chmod 644 {} +"; then
+            log_ok "File permissions set successfully (directories: 755, files: 644)."
+        else
+            log_warn "Failed to set file permissions. Files may need manual permission adjustment."
+        fi
+    elif [ $RSYNC_EXIT_CODE -eq 23 ]; then
+        log_warn "Deployment completed with some warnings (exit code 23)."
+        log_info "Some files may not have transferred completely, but the deployment likely succeeded."
+        log_info "Check $RSYNC_LOG for details."
+        # Don't exit with error for code 23 - it's often just warnings
     else
         log_error "Deployment failed! Rsync exited with code $RSYNC_EXIT_CODE."
         if grep -q 'No such file or directory' "$RSYNC_LOG"; then

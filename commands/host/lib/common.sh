@@ -15,9 +15,9 @@ NC='\033[0m' # No Color
 
 # Logging helpers
 log_hr() { echo -e "${YELLOW}----------------------------------------${NC}"; }
-log_warn() { echo -e "${YELLOW}⚠ ${NC} $*"; }
-log_error() { echo -e "${RED}✗ ${NC} $*"; }
-log_ok() { echo -e "${GREEN}✓ ${NC} $*"; }
+log_warn() { echo -e "${YELLOW}⚠ ${NC}$*"; }
+log_error() { echo -e "${RED}✗ ${NC}$*"; }
+log_ok() { echo -e "${GREEN}✓ ${NC}$*"; }
 log_success() { echo -e "${GREEN}$*"; }
 log_info() { echo -e "${NC}$*"; }
 log_header() {
@@ -147,6 +147,7 @@ ask_user() {
   if [ "$LAZY_MODE" = true ] && [ "$critical" = false ]; then
     reply="y"
     log_ask "$prompt y (auto)"
+    echo  # Add newline after auto response
   else
     log_ask "$prompt"
     read reply
