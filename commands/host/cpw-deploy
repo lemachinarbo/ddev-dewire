@@ -44,7 +44,7 @@ main() {
     setup_config_files
     sync_files
     import_database
-    update_folder_structure
+    run_transform
     echo
     log_success "All selected steps completed!"
     log_info "Reminder: Commit and push your changes to the repository to test the deployment workflows."
@@ -210,25 +210,12 @@ import_database() {
     fi
 }
 
-update_folder_structure() {
+run_transform() {
     log_header "Environment Folder Structure"
     log_info "A new folder structure is required on the $ENV server for multi-version deployments."
     ask_user "Update folder structure? [Y/n]: "
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        if [ -z "$REMOTE_USER" ] || [ -z "$REMOTE_HOST" ] || [ -z "$REMOTE_PATH" ]; then
-            log_fatal "One or more required variables (SSH_USER, SSH_HOST, DEPLOY_PATH) are empty. Check your .env file for ${ENV}_SSH_USER, ${ENV}_SSH_HOST, and ${ENV}_PATH."
-            exit 1
-        fi
-        
-        # Get SSH key name from .env or use default
-        local ssh_key_name="$(get_env_var "" SSH_KEY "$ENV_FILE")"
-        if [ -z "$ssh_key_name" ]; then
-            ssh_key_name="id_github"
-        fi
-        local ssh_key_path="$HOME/.ssh/$ssh_key_name"
-        
-        ssh -i "$ssh_key_path" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && php RockShell/rock rm:transform && find . -type d -exec chmod 755 {} \; && find . -type f -exec chmod 644 {} \;"
-        log_ok "Server file structure updated and permissions set: directories=755, files=644."
+        ddev cpw-transform "$ENV" && log_ok "Server file structure updated and permissions set: directories=755, files=644." || { log_error "Folder structure update failed!"; exit 1; }
     else
         log_warn "Skipping server file structure update and permissions fix."
     fi

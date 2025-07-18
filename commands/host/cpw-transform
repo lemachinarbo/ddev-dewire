@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+#ddev-generated
+## Description: Update environment folder structure on the remote server
+## Usage: cpw-transform [ENV]
+
+set -euo pipefail
+trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
+
+# Source common logging/colors and helpers
+source "$(dirname "$0")/lib/common.sh"
+
+if [[ "${1:-}" == "--help" ]]; then
+    echo "cpw-transform: Update environment folder structure on the remote server."
+    echo "Usage: ddev cpw-transform [ENV]"
+    exit 0
+fi
+
+main() {
+    check_env_file_exists
+    load_env_vars "$@"
+    update_folder_structure
+}
+
+load_env_vars() {
+    ENVIRONMENTS=$(get_env_environments)
+    if [ -z "$ENVIRONMENTS" ]; then
+        log_fatal "No ENVIRONMENTS variable found in .env. Please define it (e.g., ENVIRONMENTS=\"PROD STAGING TESTING\")."
+        exit 1
+    fi
+    resolve_environment "${1:-}" "$ENVIRONMENTS"
+    ENV="$SELECTED_ENV"
+    PREFIX="${ENV}_"
+    REMOTE_USER="$(get_env_var "$PREFIX" SSH_USER "$ENV_FILE")"
+    REMOTE_HOST="$(get_env_var "$PREFIX" SSH_HOST "$ENV_FILE")"
+    REMOTE_PATH="$(get_env_var "$PREFIX" PATH "$ENV_FILE")"
+}
+
+update_folder_structure() {
+    if [ -z "$REMOTE_USER" ] || [ -z "$REMOTE_HOST" ] || [ -z "$REMOTE_PATH" ]; then
+        log_fatal "One or more required variables (SSH_USER, SSH_HOST, DEPLOY_PATH) are empty. Check your .env file for ${ENV}_SSH_USER, ${ENV}_SSH_HOST, and ${ENV}_PATH."
+        exit 1
+    fi
+    # Get SSH key name from .env or use default
+    local ssh_key_name="$(get_env_var "" SSH_KEY "$ENV_FILE")"
+    if [ -z "$ssh_key_name" ]; then
+        ssh_key_name="id_github"
+    fi
+    local ssh_key_path="$HOME/.ssh/$ssh_key_name"
+    ssh -i "$ssh_key_path" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && php RockShell/rock rm:transform && find . -type d -exec chmod 755 {} \; && find . -type f -exec chmod 644 {} \;"
+}
+
+main "$@"

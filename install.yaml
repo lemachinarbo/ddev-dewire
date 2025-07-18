@@ -13,6 +13,7 @@ project_files:
   - commands/host/cpw-sshkeys-gen
   - commands/host/cpw-sshkeys-install
   - commands/host/cpw-sync
+  - commands/host/cpw-transform
   - compwser/
 
 ddev_version_constraint: '>= v1.24.3'
