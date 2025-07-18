@@ -191,10 +191,18 @@ import_database() {
             log_fatal "One or more required variables (SSH_USER, SSH_HOST, DEPLOY_PATH, DB_NAME, DB_USER, DB_PASS) are empty. Check your .env file for all required variables."
             exit 1
         fi
+        
+        # Get SSH key name from .env or use default
+        local ssh_key_name="$(get_env_var "" SSH_KEY "$ENV_FILE")"
+        if [ -z "$ssh_key_name" ]; then
+            ssh_key_name="id_github"
+        fi
+        local ssh_key_path="$HOME/.ssh/$ssh_key_name"
+        
         # Use PW_ROOT if set, else default to empty string
         local pw_root="${PW_PATH:-}"
         local db_sql_path="${pw_root:+$pw_root/}site/assets/backups/database/db.sql"
-        ssh -i "$HOME/.ssh/id_github" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && mysql -u$DB_USER -p'$DB_PASS' $DB_NAME < $db_sql_path" \
+        ssh -i "$ssh_key_path" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && mysql -u$DB_USER -p'$DB_PASS' $DB_NAME < $db_sql_path" \
             && log_ok "Local DB imported as '$DB_NAME' in $ENV environment ($REMOTE_HOST)." \
             || log_error "Database import failed!"
     else
@@ -211,7 +219,15 @@ update_folder_structure() {
             log_fatal "One or more required variables (SSH_USER, SSH_HOST, DEPLOY_PATH) are empty. Check your .env file for ${ENV}_SSH_USER, ${ENV}_SSH_HOST, and ${ENV}_PATH."
             exit 1
         fi
-        ssh -i "$HOME/.ssh/id_github" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && php RockShell/rock rm:transform && find . -type d -exec chmod 755 {} \; && find . -type f -exec chmod 644 {} \;"
+        
+        # Get SSH key name from .env or use default
+        local ssh_key_name="$(get_env_var "" SSH_KEY "$ENV_FILE")"
+        if [ -z "$ssh_key_name" ]; then
+            ssh_key_name="id_github"
+        fi
+        local ssh_key_path="$HOME/.ssh/$ssh_key_name"
+        
+        ssh -i "$ssh_key_path" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && php RockShell/rock rm:transform && find . -type d -exec chmod 755 {} \; && find . -type f -exec chmod 644 {} \;"
         log_ok "Server file structure updated and permissions set: directories=755, files=644."
     else
         log_warn "Skipping server file structure update and permissions fix."
@@ -260,6 +276,13 @@ check_github_repo() {
 }
 
 check_ssh_keys() {
+    # Get SSH key name from .env or use default
+    local ssh_key_name="$(get_env_var "" SSH_KEY "$ENV_FILE")"
+    if [ -z "$ssh_key_name" ]; then
+        ssh_key_name="id_github"
+    fi
+    local project_key_path="$HOME/.ssh/$ssh_key_name"
+    
     if [ -f "$HOME/.ssh/id_ed25519" ]; then
         log_ok "Personal SSH key (id_ed25519) found."
         HAS_PERSONAL_KEY=true
@@ -269,18 +292,25 @@ check_ssh_keys() {
         REQUIREMENTS_OK=false
     fi
 
-    if [ -f "$HOME/.ssh/id_github" ]; then
-        log_ok "Project SSH key (id_github) found."
+    if [ -f "$project_key_path" ]; then
+        log_ok "Project SSH key ($ssh_key_name) found."
         HAS_PROJECT_KEY=true
     else
-        log_error "Project SSH key (id_github) not found."
+        log_error "Project SSH key ($ssh_key_name) not found."
         HAS_PROJECT_KEY=false
         REQUIREMENTS_OK=false
     fi
 }
 
 check_generate_ssh_keys_if_missing() {
-    if [ ! -f "$HOME/.ssh/id_ed25519" ] || [ ! -f "$HOME/.ssh/id_github" ]; then
+    # Get SSH key name from .env or use default
+    local ssh_key_name="$(get_env_var "" SSH_KEY "$ENV_FILE")"
+    if [ -z "$ssh_key_name" ]; then
+        ssh_key_name="id_github"
+    fi
+    local project_key_path="$HOME/.ssh/$ssh_key_name"
+    
+    if [ ! -f "$HOME/.ssh/id_ed25519" ] || [ ! -f "$project_key_path" ]; then
         log_warn "One or both SSH keys are missing."
         log_info "SSH keys are required for secure and passwordless access for automated deployments."
         log_ask "Generate the missing SSH keys now? [Y/n]: "
@@ -290,7 +320,7 @@ check_generate_ssh_keys_if_missing() {
             ddev cpw-sshkeys-gen || { log_fatal "SSH key generation failed!"; exit 1; }
         fi
         # Re-check for keys after generation
-        if [ -f "$HOME/.ssh/id_ed25519" ] && [ -f "$HOME/.ssh/id_github" ]; then
+        if [ -f "$HOME/.ssh/id_ed25519" ] && [ -f "$project_key_path" ]; then
             log_ok "SSH keys generated and found."
             REQUIREMENTS_OK=true
         else
