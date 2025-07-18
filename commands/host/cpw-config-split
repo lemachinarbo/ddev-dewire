@@ -117,29 +117,43 @@ ask_overwrite() {
 create_deploy_config() {
     ENV_LOWER=$(to_lower "$ENV")
     DEPLOY_CONFIG="$SITE_DIR/config-local-$ENV_LOWER.php"
-    DB_PORT=$(get_env_default DB_PORT 3306)
-    DB_CHARSET=$(get_env_default DB_CHARSET utf8mb4)
-    DB_ENGINE=$(get_env_default DB_ENGINE InnoDB)
-    DB_DEBUG_RAW=$(get_env_default DEBUG false)
-    DB_DEBUG=$(to_lower "$DB_DEBUG_RAW")
+
+    # Extract variables from .env
+    DB_HOST=$(get_env_var "$PREFIX" DB_HOST "$ENV_FILE")
+    DB_NAME=$(get_env_var "$PREFIX" DB_NAME "$ENV_FILE")
+    DB_USER=$(get_env_var "$PREFIX" DB_USER "$ENV_FILE")
+    DB_PASS=$(get_env_var "$PREFIX" DB_PASS "$ENV_FILE")
+    DB_PORT=$(get_env_var "$PREFIX" DB_PORT "$ENV_FILE")
+    DB_CHARSET=$(get_env_var "$PREFIX" DB_CHARSET "$ENV_FILE")
+    DB_ENGINE=$(get_env_var "$PREFIX" DB_ENGINE "$ENV_FILE")
+    USER_AUTH_SALT=$(get_env_var "$PREFIX" USER_AUTH_SALT "$ENV_FILE")
+    HOST=$(get_env_var "$PREFIX" HOST "$ENV_FILE")
+
+    # Normalize debug flag
+    DB_DEBUG_RAW=$(get_env_var "$PREFIX" DEBUG "$ENV_FILE")
+    DB_DEBUG=$(to_lower "${DB_DEBUG_RAW:-false}")
+
+    # Generate config file
     cat >"$DEPLOY_CONFIG" <<EOF
 <?php
 // This file is generated for deployment and should be uploaded/renamed on the server.
 // Do not use as your local config-local.php!
 
-\$config->dbHost = '$(get_env_var "$PREFIX" DB_HOST "$ENV_FILE")';
-\$config->dbName = '$(get_env_var "$PREFIX" DB_NAME "$ENV_FILE")';
-\$config->dbUser = '$(get_env_var "$PREFIX" DB_USER "$ENV_FILE")';
-\$config->dbPass = '$(get_env_var "$PREFIX" DB_PASS "$ENV_FILE")';
+\$config->dbHost = '$DB_HOST';
+\$config->dbName = '$DB_NAME';
+\$config->dbUser = '$DB_USER';
+\$config->dbPass = '$DB_PASS';
 \$config->dbPort = '$DB_PORT';
 \$config->dbCharset = '$DB_CHARSET';
 \$config->dbEngine = '$DB_ENGINE';
-\$config->userAuthSalt = '$(get_env_var "$PREFIX" USER_AUTH_SALT "$ENV_FILE")';
-\$config->httpHosts = array('$(get_env_var "$PREFIX" HOST "$ENV_FILE")');
+\$config->userAuthSalt = '$USER_AUTH_SALT';
+\$config->httpHosts = array('$HOST');
 \$config->debug = $DB_DEBUG;
 EOF
+
     log_ok "config-local-$ENV_LOWER.php created in public/site/ for $ENV"
 }
+
 
 create_local_config() {
     VARS=(dbHost dbName dbUser dbPass dbPort dbCharset dbEngine userAuthSalt httpHosts debug)
