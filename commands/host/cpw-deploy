@@ -185,11 +185,15 @@ import_database() {
 run_transform() {
     log_header "Environment Folder Structure"
     log_info "A new folder structure is required on the $ENV server for multi-version deployments."
-    ask_user "Update folder structure? [Y/n]: "
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        ddev cpw-transform "$ENV" && log_ok "Server file structure updated and permissions set: directories=755, files=644." || { log_error "Folder structure update failed!"; exit 1; }
+    if [[ "$LAZY_MODE" = true ]]; then
+        ddev cpw-transform "$ENV" --lazy && log_ok "Server file structure updated and permissions set: directories=755, files=644." || { log_error "Folder structure update failed!"; exit 1; }
     else
-        log_warn "Skipping server file structure update and permissions fix."
+        ask_user "Update folder structure? [Y/n]: "
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            ddev cpw-transform "$ENV" && log_ok "Server file structure updated and permissions set: directories=755, files=644." || { log_error "Folder structure update failed!"; exit 1; }
+        else
+            log_warn "Skipping server file structure update and permissions fix."
+        fi
     fi
 }
 

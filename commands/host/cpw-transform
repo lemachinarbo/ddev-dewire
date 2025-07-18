@@ -15,6 +15,16 @@ if [[ "${1:-}" == "--help" ]]; then
     exit 0
 fi
 
+LAZY_MODE=false
+for arg in "$@"; do
+  if [[ "$arg" == "--lazy" ]]; then
+    LAZY_MODE=true
+    set -- "${@/--lazy/}"
+    break
+  fi
+
+done
+
 main() {
     check_env_file_exists
     load_env_vars "$@"
@@ -32,7 +42,12 @@ update_folder_structure() {
         log_fatal "One or more required variables (SSH_USER, SSH_HOST, DEPLOY_PATH) are empty. Check your .env file for ${ENV}_SSH_USER, ${ENV}_SSH_HOST, and ${ENV}_PATH."
         exit 1
     fi
-    ssh -i "$SSH_KEY_PATH" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && php RockShell/rock rm:transform && find . -type d -exec chmod 755 {} \; && find . -type f -exec chmod 644 {} \;"
+    echo
+    if [ "$LAZY_MODE" = true ]; then
+        ssh -i "$SSH_KEY_PATH" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && php RockShell/rock rm:transform --lazy && find . -type d -exec chmod 755 {} \; && find . -type f -exec chmod 644 {} \;"
+    else
+        ssh -i "$SSH_KEY_PATH" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && php RockShell/rock rm:transform && find . -type d -exec chmod 755 {} \; && find . -type f -exec chmod 644 {} \;"
+    fi
 }
 
 main "$@"
