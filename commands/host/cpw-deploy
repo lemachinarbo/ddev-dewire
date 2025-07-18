@@ -110,21 +110,10 @@ check_git_remote_and_branch() {
 
 
 setup_env_vars() {
-    ENVIRONMENTS=$(get_env_environments)
-    if [ -z "$ENVIRONMENTS" ]; then
-        log_fatal "No ENVIRONMENTS variable found in .env. Please define it (e.g., ENVIRONMENTS=\"PROD STAGING TESTING\")."
-        exit 1
-    fi
-    resolve_environment "${1:-}" "$ENVIRONMENTS"
-    ENV="$SELECTED_ENV"
-    PREFIX="${ENV}_"
-    REMOTE_USER="$(get_env_var "$PREFIX" SSH_USER "$ENV_FILE")"
-    REMOTE_HOST="$(get_env_var "$PREFIX" SSH_HOST "$ENV_FILE")"
-    REMOTE_PATH="$(get_env_var "$PREFIX" PATH "$ENV_FILE")"
-    PW_PATH="$(get_env_var "" PW_ROOT "$ENV_FILE")"
-    DB_NAME="$(get_env_var "$PREFIX" DB_NAME "$ENV_FILE")"
-    DB_USER="$(get_env_var "$PREFIX" DB_USER "$ENV_FILE")"
-    DB_PASS="$(get_env_var "$PREFIX" DB_PASS "$ENV_FILE")"
+    load_standard_env_vars "$@"
+    load_ssh_vars
+    load_remote_vars
+    load_github_vars
 }
 
 setup_ssh_keys() {
@@ -187,24 +176,7 @@ import_database() {
     log_info "Import local database to $ENV server to run the site."
     ask_user "Import now? [Y/n]: "
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        if [ -z "$REMOTE_USER" ] || [ -z "$REMOTE_HOST" ] || [ -z "$REMOTE_PATH" ] || [ -z "$DB_NAME" ] || [ -z "$DB_USER" ] || [ -z "$DB_PASS" ]; then
-            log_fatal "One or more required variables (SSH_USER, SSH_HOST, DEPLOY_PATH, DB_NAME, DB_USER, DB_PASS) are empty. Check your .env file for all required variables."
-            exit 1
-        fi
-        
-        # Get SSH key name from .env or use default
-        local ssh_key_name="$(get_env_var "" SSH_KEY "$ENV_FILE")"
-        if [ -z "$ssh_key_name" ]; then
-            ssh_key_name="id_github"
-        fi
-        local ssh_key_path="$HOME/.ssh/$ssh_key_name"
-        
-        # Use PW_ROOT if set, else default to empty string
-        local pw_root="${PW_PATH:-}"
-        local db_sql_path="${pw_root:+$pw_root/}site/assets/backups/database/db.sql"
-        ssh -i "$ssh_key_path" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && mysql -u$DB_USER -p'$DB_PASS' $DB_NAME < $db_sql_path" \
-            && log_ok "Local DB imported as '$DB_NAME' in $ENV environment ($REMOTE_HOST)." \
-            || log_error "Database import failed!"
+        ddev cpw-db-import "$ENV" && log_ok "Database import completed successfully." || { log_error "Database import failed!"; exit 1; }
     else
         log_warn "Skipping database import."
     fi

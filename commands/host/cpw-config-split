@@ -22,7 +22,7 @@ fi
 
 main() {
     check_env_file_exists
-    resolve_and_load_env_vars "$@"
+    load_standard_env_vars "$@"
     check_site_directory
     generate_salt_if_missing
     if ! ask_overwrite "$LOCAL_CONFIG" "config-local.php"; then
@@ -48,17 +48,6 @@ write_config_line() {
     else
         echo "\$config->$var = $value;" >>"$LOCAL_CONFIG"
     fi
-}
-
-resolve_and_load_env_vars() {
-    ENVIRONMENTS=$(get_env_environments)
-    if [ -z "$ENVIRONMENTS" ]; then
-        log_error "No ENVIRONMENTS variable found in $ENV_FILE"
-        exit 1
-    fi
-    resolve_environment "${1:-}" "$ENVIRONMENTS"
-    ENV="$SELECTED_ENV"
-    PREFIX="${ENV}_"
 }
 
 check_site_directory() {

@@ -20,26 +20,12 @@ WORKFLOWS_DIR="$DDEV_APPROOT/.github/workflows"
 main() {
     mkdir -p "$WORKFLOWS_DIR"
     check_env_file_exists
-    load_env_vars "$@"
+    load_standard_env_vars "$@"
+    load_github_vars
     check_repo_access
     get_branches
     select_branch "$@"
     generate_workflow
-}
-
-load_env_vars() {
-    ENVIRONMENTS=$(get_env_environments)
-    if [ -z "$ENVIRONMENTS" ]; then
-        log_error "No ENVIRONMENTS variable found in $ENV_FILE."
-        exit 1
-    fi
-    GITHUB_OWNER="$(get_env_var "" GITHUB_OWNER "$ENV_FILE")"
-    GITHUB_REPO="$(get_env_var "" GITHUB_REPO "$ENV_FILE")"
-    if [ -z "$GITHUB_OWNER" ] || [ -z "$GITHUB_REPO" ]; then
-        log_error "GITHUB_OWNER or GITHUB_REPO not set in .env."
-        exit 1
-    fi
-    REPO_FULL="$GITHUB_OWNER/$GITHUB_REPO"
 }
 
 check_repo_access() {

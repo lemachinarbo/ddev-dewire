@@ -174,3 +174,59 @@ sed_inplace() {
 # Compatible lowercase conversion
 to_lower() { echo "$1" | tr '[:upper:]' '[:lower:]'; }
 
+# Standard environment variable loading functions
+
+# Load basic environment resolution (used by all scripts)
+load_standard_env_vars() {
+    local env_arg="${1:-}"
+    ENVIRONMENTS=$(get_env_environments)
+    if [ -z "$ENVIRONMENTS" ]; then
+        log_error "No ENVIRONMENTS variable found in $ENV_FILE"
+        exit 1
+    fi
+    resolve_environment "$env_arg" "$ENVIRONMENTS"
+    ENV="$SELECTED_ENV"
+    PREFIX="${ENV}_"
+}
+
+# Load SSH connection variables
+load_ssh_vars() {
+    SSH_USER="$(get_env_var "$PREFIX" SSH_USER "$ENV_FILE")"
+    SSH_HOST="$(get_env_var "$PREFIX" SSH_HOST "$ENV_FILE")"
+    SSH_KEY_NAME="$(get_env_var "" SSH_KEY "$ENV_FILE")"
+    if [ -z "$SSH_KEY_NAME" ]; then
+        SSH_KEY_NAME="id_github"
+    fi
+    SSH_KEY_PATH="$HOME/.ssh/$SSH_KEY_NAME"
+    SERVER="$SSH_USER@$SSH_HOST"
+    PW_ROOT="$(get_env_var "" PW_ROOT "$ENV_FILE")"
+}
+
+# Load remote deployment variables
+load_remote_vars() {
+    REMOTE_USER="$(get_env_var "$PREFIX" SSH_USER "$ENV_FILE")"
+    REMOTE_HOST="$(get_env_var "$PREFIX" SSH_HOST "$ENV_FILE")"
+    REMOTE_PATH="$(get_env_var "$PREFIX" PATH "$ENV_FILE")"
+    REMOTE_USER_HOST="$REMOTE_USER@$REMOTE_HOST"
+}
+
+# Load GitHub repository variables
+load_github_vars() {
+    GITHUB_OWNER="$(get_env_var "" GITHUB_OWNER "$ENV_FILE")"
+    GITHUB_REPO="$(get_env_var "" GITHUB_REPO "$ENV_FILE")"
+    if [ -z "$GITHUB_OWNER" ] || [ -z "$GITHUB_REPO" ]; then
+        log_error "GITHUB_OWNER or GITHUB_REPO not set in .env."
+        exit 1
+    fi
+    REPO_FULL="$GITHUB_OWNER/$GITHUB_REPO"
+}
+
+# Load database variables
+load_db_vars() {
+    DB_NAME="$(get_env_var "$PREFIX" DB_NAME "$ENV_FILE")"
+    DB_USER="$(get_env_var "$PREFIX" DB_USER "$ENV_FILE")"
+    DB_PASS="$(get_env_var "$PREFIX" DB_PASS "$ENV_FILE")"
+    DB_HOST="$(get_env_var "$PREFIX" DB_HOST "$ENV_FILE")"
+    DB_PORT="$(get_env_var "$PREFIX" DB_PORT "$ENV_FILE")"
+}
+

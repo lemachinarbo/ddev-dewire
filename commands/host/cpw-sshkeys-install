@@ -20,14 +20,10 @@ PERSONAL_KEY="$SSH_DIR/id_ed25519"
 
 main() {
     check_env_file_exists
-    resolve_and_load_env_vars "$@"
+    load_standard_env_vars "$@"
+    load_ssh_vars
     
-    # Get SSH key name from .env or use default
-    local ssh_key_name="$(get_env_var "" SSH_KEY "$ENV_FILE")"
-    if [ -z "$ssh_key_name" ]; then
-        ssh_key_name="id_github"
-    fi
-    PROJECT_KEY="$SSH_DIR/$ssh_key_name"
+    PROJECT_KEY="$SSH_KEY_PATH"
     
     local KEYS=("$PERSONAL_KEY" "$PROJECT_KEY")
     local LABELS=("Personal" "Project")
@@ -40,20 +36,6 @@ main() {
     for i in "${!KEYS[@]}"; do
         test_key_auth "${LABELS[$i]}" "${KEYS[$i]}"
     done
-}
-
-resolve_and_load_env_vars() {
-    ENVIRONMENTS=$(get_env_environments)
-    if [ -z "$ENVIRONMENTS" ]; then
-        log_error "No ENVIRONMENTS variable found in $ENV_FILE"
-        exit 1
-    fi
-    resolve_environment "${1:-}" "$ENVIRONMENTS"
-    ENV="$SELECTED_ENV"
-    PREFIX="${ENV}_"
-    SSH_USER="$(get_env_var "$PREFIX" SSH_USER "$ENV_FILE")"
-    SSH_HOST="$(get_env_var "$PREFIX" SSH_HOST "$ENV_FILE")"
-    SERVER="$SSH_USER@$SSH_HOST"
 }
 
 is_key_installed() {

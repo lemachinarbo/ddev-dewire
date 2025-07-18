@@ -22,17 +22,9 @@ main() {
 }
 
 load_env_vars() {
-    ENVIRONMENTS=$(get_env_environments)
-    if [ -z "$ENVIRONMENTS" ]; then
-        log_fatal "No ENVIRONMENTS variable found in .env. Please define it (e.g., ENVIRONMENTS=\"PROD STAGING TESTING\")."
-        exit 1
-    fi
-    resolve_environment "${1:-}" "$ENVIRONMENTS"
-    ENV="$SELECTED_ENV"
-    PREFIX="${ENV}_"
-    REMOTE_USER="$(get_env_var "$PREFIX" SSH_USER "$ENV_FILE")"
-    REMOTE_HOST="$(get_env_var "$PREFIX" SSH_HOST "$ENV_FILE")"
-    REMOTE_PATH="$(get_env_var "$PREFIX" PATH "$ENV_FILE")"
+    load_standard_env_vars "$@"
+    load_ssh_vars
+    load_remote_vars
 }
 
 update_folder_structure() {
@@ -40,13 +32,7 @@ update_folder_structure() {
         log_fatal "One or more required variables (SSH_USER, SSH_HOST, DEPLOY_PATH) are empty. Check your .env file for ${ENV}_SSH_USER, ${ENV}_SSH_HOST, and ${ENV}_PATH."
         exit 1
     fi
-    # Get SSH key name from .env or use default
-    local ssh_key_name="$(get_env_var "" SSH_KEY "$ENV_FILE")"
-    if [ -z "$ssh_key_name" ]; then
-        ssh_key_name="id_github"
-    fi
-    local ssh_key_path="$HOME/.ssh/$ssh_key_name"
-    ssh -i "$ssh_key_path" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && php RockShell/rock rm:transform && find . -type d -exec chmod 755 {} \; && find . -type f -exec chmod 644 {} \;"
+    ssh -i "$SSH_KEY_PATH" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && php RockShell/rock rm:transform && find . -type d -exec chmod 755 {} \; && find . -type f -exec chmod 644 {} \;"
 }
 
 main "$@"
