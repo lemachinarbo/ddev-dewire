@@ -5,6 +5,7 @@ project_files:
   - commands/host/lib/common.sh
   - commands/host/compwser
   - commands/host/cpw-config-split
+  - commands/host/cpw-db-import
   - commands/host/cpw-gh-env
   - commands/host/cpw-gh-workflow
   - commands/host/cpw-deploy

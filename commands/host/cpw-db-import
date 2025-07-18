@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+#ddev-generated
+## Description: Import local database to remote server for selected environment
+## Usage: cpw-db-import [ENV]
+
+set -euo pipefail
+trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
+
+# Source common logging/colors and helpers
+source "$(dirname "$0")/lib/common.sh"
+
+if [[ "${1:-}" == "--help" ]]; then
+    echo "cpw-db-import: Import local database to remote server for selected environment."
+    echo "Usage: ddev cpw-db-import [ENV]"
+    exit 0
+fi
+
+main() {
+    check_env_file_exists
+    load_standard_env_vars "$@"
+    load_ssh_vars
+    load_remote_vars
+    load_db_vars
+    import_database
+}
+
+import_database() {
+    if [ -z "$REMOTE_USER" ] || [ -z "$REMOTE_HOST" ] || [ -z "$REMOTE_PATH" ] || [ -z "$DB_NAME" ] || [ -z "$DB_USER" ] || [ -z "$DB_PASS" ]; then
+        log_fatal "One or more required variables (SSH_USER, SSH_HOST, DEPLOY_PATH, DB_NAME, DB_USER, DB_PASS) are empty. Check your .env file for all required variables."
+        exit 1
+    fi
+    # Use PW_ROOT if set, else default to empty string
+    local pw_root="${PW_ROOT:-}"
+    local db_sql_path="${pw_root:+$pw_root/}site/assets/backups/database/db.sql"
+    ssh -i "$SSH_KEY_PATH" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && mysql -u$DB_USER -p'$DB_PASS' $DB_NAME < $db_sql_path"
+    log_ok "Local DB imported as '$DB_NAME' in $ENV environment ($REMOTE_HOST)."
+}
+
+main "$@"
