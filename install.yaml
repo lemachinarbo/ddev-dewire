@@ -3,6 +3,8 @@ name: compwser
 project_files:
   - docker-compose.compwser.yaml
   - commands/host/lib/common.sh
+  - commands/host/lib/env-loader.sh
+  - commands/host/lib/.env.schema
   - commands/host/compwser
   - commands/host/cpw-config-split
   - commands/host/cpw-db-import

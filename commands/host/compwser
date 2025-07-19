@@ -16,6 +16,7 @@ if [[ "${1:-}" == "--help" ]]; then
 fi
 
 main() {
+    validate_and_load_env "SKIP_ENV_SELECTION" "${1:-}"
     log_header "Welcome to comPWser: Like composer but with PW!"
     log_info "This will install ProcessWire and configure GitHub deployment workflows."
     log_info "Make sure you have filled out all prerequisites and have completed your .env file before continuing."

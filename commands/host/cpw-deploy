@@ -35,8 +35,16 @@ default_answer() {
 main() {
     log_header "Welcome to the comPWser Environment Setup tool"
     log_info "This script will guide you through setting up your environment for automated deployments."
-    check_requirements
-    setup_env_vars "$@"
+    
+    # First check basic requirements (tools, files, etc)
+    check_basic_requirements
+    
+    # Then validate and load environment (this will ask for environment selection)
+    validate_and_load_env "" "${1:-}"
+    
+    # Finally check environment-specific requirements (SSH keys, etc)
+    check_env_requirements
+    
     setup_ssh_keys
     check_git_remote_and_branch
     setup_github_actions
@@ -50,27 +58,35 @@ main() {
     log_info "Reminder: Commit and push your changes to the repository to test the deployment workflows."
 }
 
-check_requirements(){
+check_basic_requirements() {
     echo
-    log_info "Checking for requirements:"
+    log_info "Checking basic requirements:"
     REQUIREMENTS_OK=true
     check_bash_version
-    get_github_env_vars
-    check_env_file_exists
-    check_env_placeholders
     check_github_cli
+    if [ "$REQUIREMENTS_OK" = false ]; then
+        log_fatal "Some basic requirements are missing. Please fix them and rerun the script."
+        exit 1
+    fi
+    log_success "Basic requirements met."
+}
+
+check_env_requirements() {
+    echo
+    log_info "Checking environment requirements:"
+    REQUIREMENTS_OK=true
     check_github_repo
     check_ssh_keys
     check_generate_ssh_keys_if_missing
     if [ "$REQUIREMENTS_OK" = false ]; then
-        log_fatal "Some requirements are missing or invalid. Please fix them and rerun the script."
+        log_fatal "Some environment requirements are missing or invalid. Please fix them and rerun the script."
         exit 1
     fi
-    log_success "All requirements met. Let's start environment setup.\n"
+    log_success "All requirements met. Let's start environment setup."
 }
 
 check_git_remote_and_branch() {
-    REMOTE_URL="git@github.com:$GITHUB_OWNER/$GITHUB_REPO.git"
+    REMOTE_URL="git@github.com:$REPO_OWNER/$REPO_NAME.git"
     log_header "Git Repository Initialization"
     log_info "Setting git remote and initializing repository if needed."
     ask_user "Initialize remote repository? [Y/n]: "
@@ -121,7 +137,7 @@ setup_ssh_keys() {
     log_info "Allows automated deployments with passwordless SSH access."
     ask_user "Install keys now? [Y/n]: "
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        ddev cpw-sshkeys-install "$ENV" && log_success "SSH key installation and authentication test complete." || { log_error "SSH key installation failed!"; exit 1; }
+        ddev cpw-sshkeys-install "$ENV" --silent && log_success "SSH key installation and authentication test complete." || { log_error "SSH key installation failed!"; exit 1; }
     else
         log_warn "Skipping SSH key installation."
     fi
@@ -132,7 +148,7 @@ setup_github_actions() {
     log_info "Automated deployment requires secrets and variables set in the GitHub $ENV environment"
     ask_user "Run GitHub Actions setup? [Y/n]: "
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        ddev cpw-gh-env "$ENV" && log_success "All GitHub Actions variables and secrets have been processed successfully." || { log_error "GitHub setup failed!"; exit 1; }
+        ddev cpw-gh-env "$ENV" --silent && log_success "All GitHub Actions variables and secrets have been processed successfully." || { log_error "GitHub setup failed!"; exit 1; }
     else
         log_warn "Skipping GitHub Actions setup."
     fi
@@ -229,51 +245,37 @@ check_github_cli() {
 
 check_github_repo() {
     if [ "$HAS_GH" = true ]; then
-        if ! gh repo view "$GITHUB_OWNER/$GITHUB_REPO" >/dev/null 2>&1; then
-            log_fatal "Repository $GITHUB_OWNER/$GITHUB_REPO not found or you do not have access. Please check your .env file, repo visibility, and GitHub permissions."
+        if ! gh repo view "$REPO_FULL" >/dev/null 2>&1; then
+            log_fatal "Repository $REPO_FULL not found or you do not have access. Please check your .env file, repo visibility, and GitHub permissions."
             REQUIREMENTS_OK=false
         else
-            log_ok "Repository $GITHUB_OWNER/$GITHUB_REPO found and accessible."
+            log_ok "Repository $REPO_FULL found and accessible."
         fi
     fi
 }
 
 check_ssh_keys() {
-    # Get SSH key name from .env or use default
-    local ssh_key_name="$(get_env_var "" SSH_KEY "$ENV_FILE")"
-    if [ -z "$ssh_key_name" ]; then
-        ssh_key_name="id_github"
-    fi
-    local project_key_path="$HOME/.ssh/$ssh_key_name"
-    
-    if [ -f "$HOME/.ssh/id_ed25519" ]; then
-        log_ok "Personal SSH key (id_ed25519) found."
-        HAS_PERSONAL_KEY=true
-    else
-        log_error "Personal SSH key (id_ed25519) not found."
-        HAS_PERSONAL_KEY=false
-        REQUIREMENTS_OK=false
-    fi
+    # if [ -f "$HOME/.ssh/id_ed25519" ]; then
+    #     log_ok "Personal SSH key (id_ed25519) found."
+    #     HAS_PERSONAL_KEY=true
+    # else
+    #     log_error "Personal SSH key (id_ed25519) not found."
+    #     HAS_PERSONAL_KEY=false
+    #     REQUIREMENTS_OK=false
+    # fi
 
-    if [ -f "$project_key_path" ]; then
-        log_ok "Project SSH key ($ssh_key_name) found."
+    if [ -f "$SSH_KEY_PATH" ]; then
+        log_ok "Project SSH key ($SSH_KEY_NAME) found."
         HAS_PROJECT_KEY=true
     else
-        log_error "Project SSH key ($ssh_key_name) not found."
+        log_error "Project SSH key ($SSH_KEY_NAME) not found."
         HAS_PROJECT_KEY=false
         REQUIREMENTS_OK=false
     fi
 }
 
 check_generate_ssh_keys_if_missing() {
-    # Get SSH key name from .env or use default
-    local ssh_key_name="$(get_env_var "" SSH_KEY "$ENV_FILE")"
-    if [ -z "$ssh_key_name" ]; then
-        ssh_key_name="id_github"
-    fi
-    local project_key_path="$HOME/.ssh/$ssh_key_name"
-    
-    if [ ! -f "$HOME/.ssh/id_ed25519" ] || [ ! -f "$project_key_path" ]; then
+    if [ ! -f "$HOME/.ssh/id_ed25519" ] || [ ! -f "$SSH_KEY_PATH" ]; then
         log_warn "One or both SSH keys are missing."
         log_info "SSH keys are required for secure and passwordless access for automated deployments."
         log_ask "Generate the missing SSH keys now? [Y/n]: "
@@ -283,7 +285,7 @@ check_generate_ssh_keys_if_missing() {
             ddev cpw-sshkeys-gen || { log_fatal "SSH key generation failed!"; exit 1; }
         fi
         # Re-check for keys after generation
-        if [ -f "$HOME/.ssh/id_ed25519" ] && [ -f "$project_key_path" ]; then
+        if [ -f "$HOME/.ssh/id_ed25519" ] && [ -f "$SSH_KEY_PATH" ]; then
             log_ok "SSH keys generated and found."
             REQUIREMENTS_OK=true
         else
@@ -301,15 +303,5 @@ check_bash_version() {
         log_warn "Bash $BASH_VERSION found (bash $bash_version detected) - running in compatibility mode, let's cross fingers! 🤞"
     fi
 }
-
-get_github_env_vars() {
-    GITHUB_OWNER="$(get_env_var "" GITHUB_OWNER "$ENV_FILE")"
-    GITHUB_REPO="$(get_env_var "" GITHUB_REPO "$ENV_FILE")"
-    if [ -z "$GITHUB_OWNER" ] || [ -z "$GITHUB_REPO" ]; then
-        log_fatal "GITHUB_OWNER or GITHUB_REPO not set in .env. Please set these variables and try again."
-        exit 1
-    fi
-}
-
 
 main "$@"

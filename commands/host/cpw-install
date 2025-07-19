@@ -11,13 +11,15 @@ source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
     echo "cpw-install: Install and bootstrap ProcessWire project."
-    echo "Usage: ddev cpw-install"
+    echo "Usage: ddev cpw-install [--debug]"
+    echo "  --debug    Enable detailed debug output"
     exit 0
 fi
 
 DEFAULT_DOCROOT="public"
 
 main() {
+    validate_and_load_env "SKIP_ENV_SELECTION" "${1:-}"
     update_ddev_config
     #temporaly disable for testing purposes
     ddev_restart 

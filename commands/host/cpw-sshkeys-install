@@ -19,13 +19,20 @@ SSH_DIR="$HOME/.ssh"
 PERSONAL_KEY="$SSH_DIR/id_ed25519"
 
 main() {
-    check_env_file_exists
-    load_standard_env_vars "$@"
-    load_ssh_vars
+    # Check for silent flag
+    local silent_flag=""
+    for arg in "$@"; do
+        if [[ "$arg" == "--silent" ]]; then
+            silent_flag="--silent"
+            # Remove --silent from args before passing environment
+            set -- "${@/--silent/}"
+            break
+        fi
+    done
     
-    PROJECT_KEY="$SSH_KEY_PATH"
+    validate_and_load_env "${1:-}" "$silent_flag"
     
-    local KEYS=("$PERSONAL_KEY" "$PROJECT_KEY")
+    local KEYS=("$PERSONAL_KEY" "$SSH_KEY_PATH")
     local LABELS=("Personal" "Project")
     echo
     log_info "Installing ssh keys ..."
