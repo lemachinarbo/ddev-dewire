@@ -22,9 +22,9 @@ fi
 
 main() {
     # Parse script arguments
-    parse_silent_flag "$@"
+    parse_script_args "$@"
     
-    validate_and_load_env "${SILENT_ARGS[0]:-}" "$SILENT_FLAG"
+    validate_and_load_env "${PARSED_ARGS[0]:-}" "$SILENT_FLAG"
     check_site_directory
     generate_salt_if_missing
     if ! ask_overwrite "$LOCAL_CONFIG" "config-local.php"; then
@@ -38,6 +38,7 @@ main() {
     add_require_to_config
     remove_comments_from_config
     final_cleanup
+    upload_salts_to_github
 }
 
 # Write a config line to config-local.php
@@ -61,33 +62,50 @@ check_site_directory() {
 }
 
 generate_salt_if_missing() {
-    SALT_VAR="${PREFIX}USER_AUTH_SALT"
-    SALT_VALUE=$(eval "echo \${$SALT_VAR:-}")
-    if [ -z "$SALT_VALUE" ]; then
-        NEW_SALT=$(openssl rand -base64 40)
-        if grep -q "^${SALT_VAR}=" "$ENV_FILE"; then
-            sed_inplace "s|^${SALT_VAR}=.*|${SALT_VAR}=\"$NEW_SALT\"|" "$ENV_FILE"
-        else
-            awk -v prefix="$PREFIX" -v saltline="${SALT_VAR}=\"$NEW_SALT\"" '
-        { lines[NR]=$0 }
-        $0 ~ "^"prefix { last=NR }
-        END {
-          if (last) {
-            for (i=1; i<=NR; i++) {
-              print lines[i]
-              if (i==last) print saltline
+    # Handle both userAuthSalt and tableSalt
+    generate_salt_for_type "USER_AUTH_SALT" "userAuthSalt"
+    generate_salt_for_type "TABLE_SALT" "tableSalt"
+}
+
+generate_salt_for_type() {
+    local env_var_name="$1"  # e.g., "USER_AUTH_SALT"
+    local config_var_name="$2"  # e.g., "userAuthSalt"
+    local salt_var="${PREFIX}${env_var_name}"
+    local salt_value=$(eval "echo \${$salt_var:-}")
+    
+    # If not in environment, try to extract from existing config.php.bak
+    if [ -z "$salt_value" ] && [ -f "$CONFIG_MAIN.bak" ]; then
+        salt_value=$(awk -v var="$config_var_name" '
+            $0 ~ "\\$config->"var"[[:space:]]*=[[:space:]]*" {
+                sub(/^[^=]*=[[:space:]]*/, "", $0);
+                sub(/;.*$/, "", $0);
+                gsub(/['\''"]/, "", $0);
+                gsub(/[[:space:]]/, "", $0);
+                print $0;
+                exit
             }
-          } else {
-            for (i=1; i<=NR; i++) print lines[i]
-            print saltline
-          }
-        }
-      ' "$ENV_FILE" >"$ENV_FILE.tmp" && mv "$ENV_FILE.tmp" "$ENV_FILE"
+        ' "$CONFIG_MAIN.bak")
+        
+        if [ -n "$salt_value" ]; then
+            if [ "$SILENT_FLAG" != "--silent" ]; then
+                log_ok "Found existing $config_var_name in config.php.bak: ${salt_value:0:8}..."
+            fi
+            # Store in environment variable for this session
+            export ${salt_var}="$salt_value"
         fi
-        SALT_VALUE="$NEW_SALT"
-        export ${SALT_VAR}="$NEW_SALT"
-        log_ok "Generated and added unique USER_AUTH_SALT for $ENV to .env. This salt is unique per environment and must be kept safe."
     fi
+    
+    # Generate new salt if still missing
+    if [ -z "$salt_value" ]; then
+        salt_value=$(openssl rand -base64 40)
+        export ${salt_var}="$salt_value"
+        if [ "$SILENT_FLAG" != "--silent" ]; then
+            log_ok "Generated new $config_var_name for $ENV: ${salt_value:0:8}..."
+        fi
+    fi
+    
+    # Note: We no longer store salts in .env file for security reasons
+    # Salts will be pushed to GitHub environment secrets instead
 }
 
 ask_overwrite() {
@@ -110,7 +128,7 @@ create_deploy_config() {
     ENV_LOWER=$(to_lower "$ENV")
     DEPLOY_CONFIG="$SITE_DIR/config-local-$ENV_LOWER.php"
 
-    # Extract variables from .env
+    # Get variables from environment (set by generate_salt_if_missing) or .env file
     DB_HOST=$(get_env_var "$PREFIX" DB_HOST "$ENV_FILE")
     DB_NAME=$(get_env_var "$PREFIX" DB_NAME "$ENV_FILE")
     DB_USER=$(get_env_var "$PREFIX" DB_USER "$ENV_FILE")
@@ -118,7 +136,13 @@ create_deploy_config() {
     DB_PORT=$(get_env_var "$PREFIX" DB_PORT "$ENV_FILE")
     DB_CHARSET=$(get_env_var "$PREFIX" DB_CHARSET "$ENV_FILE")
     DB_ENGINE=$(get_env_var "$PREFIX" DB_ENGINE "$ENV_FILE")
-    USER_AUTH_SALT=$(get_env_var "$PREFIX" USER_AUTH_SALT "$ENV_FILE")
+    
+    # Get salts from environment variables (set by generate_salt_if_missing)
+    USER_AUTH_SALT_VAR="${PREFIX}USER_AUTH_SALT"
+    TABLE_SALT_VAR="${PREFIX}TABLE_SALT"
+    USER_AUTH_SALT="${!USER_AUTH_SALT_VAR}"
+    TABLE_SALT="${!TABLE_SALT_VAR}"
+    
     HOST=$(get_env_var "$PREFIX" HOST "$ENV_FILE")
 
     # Normalize debug flag
@@ -139,6 +163,7 @@ create_deploy_config() {
 \$config->dbCharset = '$DB_CHARSET';
 \$config->dbEngine = '$DB_ENGINE';
 \$config->userAuthSalt = '$USER_AUTH_SALT';
+\$config->tableSalt = '$TABLE_SALT';
 \$config->httpHosts = array('$HOST');
 \$config->debug = $DB_DEBUG;
 EOF
@@ -148,7 +173,7 @@ EOF
 
 
 create_local_config() {
-    VARS=(dbHost dbName dbUser dbPass dbPort dbCharset dbEngine userAuthSalt httpHosts debug)
+    VARS=(dbHost dbName dbUser dbPass dbPort dbCharset dbEngine userAuthSalt tableSalt httpHosts debug)
     # Use indexed arrays instead of associative arrays for bash 3.2+ compatibility
     KEYS=()
     VALUES=()
@@ -210,6 +235,7 @@ remove_config_lines_from_main() {
             -e '/dbCharset/d' \
             -e '/dbEngine/d' \
             -e '/userAuthSalt/d' \
+            -e '/tableSalt/d' \
             -e '/httpHosts/d' \
             -e '/debug/d' \
             "$CONFIG_MAIN"
@@ -228,6 +254,7 @@ remove_config_lines_from_main() {
                 -e '/dbCharset/d' \
                 -e '/dbEngine/d' \
                 -e '/userAuthSalt/d' \
+                -e '/tableSalt/d' \
                 -e '/httpHosts/d' \
                 -e '/debug/d' \
                 "$CONFIG_MAIN"
@@ -312,6 +339,111 @@ final_cleanup() {
     rm -f "$TMP_CONFIG"
     
     log_ok "Config file formatting cleaned up"
+}
+
+upload_salts_to_github() {
+    # Check if GitHub CLI is available and we're authenticated
+    if ! command -v gh >/dev/null 2>&1; then
+        if [ "$SILENT_FLAG" != "--silent" ]; then
+            log_warn "GitHub CLI (gh) not found. Skipping salt upload to GitHub."
+        fi
+        return 0
+    fi
+    
+    if ! gh auth status >/dev/null 2>&1; then
+        if [ "$SILENT_FLAG" != "--silent" ]; then
+            log_warn "GitHub CLI not authenticated. Skipping salt upload to GitHub."
+        fi
+        return 0
+    fi
+    
+    # Check repository access
+    if ! gh repo view "$REPO_FULL" >/dev/null 2>&1; then
+        if [ "$SILENT_FLAG" != "--silent" ]; then
+            log_warn "Cannot access repository $REPO_FULL. Skipping salt upload to GitHub."
+        fi
+        return 0
+    fi
+    
+    if [ "$SILENT_FLAG" != "--silent" ]; then
+        log_info "Uploading ProcessWire salts to GitHub environment secrets..."
+    fi
+    
+    local salt_count=0
+    local errors=0
+    
+    # Upload LOCAL environment salts (from config.php.bak)
+    for salt_type in "USER_AUTH_SALT" "TABLE_SALT"; do
+        # For LOCAL environment, get salts from the original config values
+        local salt_value=""
+        local config_var_name=""
+        
+        if [ "$salt_type" = "USER_AUTH_SALT" ]; then
+            config_var_name="userAuthSalt"
+        else
+            config_var_name="tableSalt"
+        fi
+        
+        # Extract salt from config.php.bak for LOCAL environment
+        if [ -f "$CONFIG_MAIN.bak" ]; then
+            salt_value=$(awk -v var="$config_var_name" '
+                $0 ~ "\\$config->"var"[[:space:]]*=[[:space:]]*" {
+                    sub(/^[^=]*=[[:space:]]*/, "", $0);
+                    sub(/;.*$/, "", $0);
+                    gsub(/['\''"]/, "", $0);
+                    gsub(/[[:space:]]/, "", $0);
+                    print $0;
+                    exit
+                }
+            ' "$CONFIG_MAIN.bak")
+        fi
+        
+        if [ -n "$salt_value" ]; then
+            # Upload to LOCAL environment
+            if gh secret set "$salt_type" --env "LOCAL" --body "$salt_value" --repo "$REPO_FULL" >/dev/null 2>&1; then
+                salt_count=$((salt_count + 1))
+                if [ "$SILENT_FLAG" != "--silent" ]; then
+                    log_ok "Uploaded $salt_type to LOCAL environment"
+                fi
+            else
+                errors=$((errors + 1))
+                if [ "$SILENT_FLAG" != "--silent" ]; then
+                    log_error "Failed to upload $salt_type to LOCAL environment"
+                fi
+            fi
+        fi
+    done
+    
+    # Upload environment-specific salts (generated/extracted for this environment)
+    for salt_type in "USER_AUTH_SALT" "TABLE_SALT"; do
+        local salt_var="${PREFIX}${salt_type}"
+        local salt_value="${!salt_var:-}"
+        
+        if [ -n "$salt_value" ]; then
+            # Upload to specific environment (e.g., PROD, STAGING)
+            if gh secret set "$salt_type" --env "$ENV" --body "$salt_value" --repo "$REPO_FULL" >/dev/null 2>&1; then
+                salt_count=$((salt_count + 1))
+                if [ "$SILENT_FLAG" != "--silent" ]; then
+                    log_ok "Uploaded $salt_type to $ENV environment"
+                fi
+            else
+                errors=$((errors + 1))
+                if [ "$SILENT_FLAG" != "--silent" ]; then
+                    log_error "Failed to upload $salt_type to $ENV environment"
+                fi
+            fi
+        fi
+    done
+    
+    # Summary
+    if [ "$SILENT_FLAG" != "--silent" ]; then
+        if [ $salt_count -gt 0 ]; then
+            log_ok "Uploaded $salt_count ProcessWire salts to GitHub environments"
+        fi
+        if [ $errors -gt 0 ]; then
+            log_warn "$errors salt uploads failed"
+        fi
+    fi
 }
 
 main "$@"
