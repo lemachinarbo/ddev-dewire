@@ -11,16 +11,15 @@ source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
     echo "cpw-db-import: Import local database to remote server for selected environment."
-    echo "Usage: ddev cpw-db-import [ENV]"
+    echo "Usage: ddev cpw-db-import [ENV] [--silent]"
     exit 0
 fi
 
 main() {
-    check_env_file_exists
-    load_standard_env_vars "$@"
-    load_ssh_vars
-    load_remote_vars
-    load_db_vars
+    # Parse script arguments
+    parse_silent_flag "$@"
+    
+    validate_and_load_env "${SILENT_ARGS[0]:-}" "$SILENT_FLAG"
     import_database
 }
 

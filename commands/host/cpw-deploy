@@ -124,14 +124,6 @@ check_git_remote_and_branch() {
     fi
 }
 
-
-setup_env_vars() {
-    load_standard_env_vars "$@"
-    load_ssh_vars
-    load_remote_vars
-    load_github_vars
-}
-
 setup_ssh_keys() {
     log_header "Installing SSH Keys"
     log_info "Allows automated deployments with passwordless SSH access."

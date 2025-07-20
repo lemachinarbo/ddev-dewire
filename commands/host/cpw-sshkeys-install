@@ -19,18 +19,10 @@ SSH_DIR="$HOME/.ssh"
 PERSONAL_KEY="$SSH_DIR/id_ed25519"
 
 main() {
-    # Check for silent flag
-    local silent_flag=""
-    for arg in "$@"; do
-        if [[ "$arg" == "--silent" ]]; then
-            silent_flag="--silent"
-            # Remove --silent from args before passing environment
-            set -- "${@/--silent/}"
-            break
-        fi
-    done
+    # Parse script arguments  
+    parse_silent_flag "$@"
     
-    validate_and_load_env "${1:-}" "$silent_flag"
+    validate_and_load_env "${SILENT_ARGS[0]:-}" "$SILENT_FLAG"
     
     local KEYS=("$PERSONAL_KEY" "$SSH_KEY_PATH")
     local LABELS=("Personal" "Project")

@@ -11,7 +11,7 @@ source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
     echo "cpw-sync: Sync files to the selected environment's server using rsync."
-    echo "Usage: ddev cpw-sync [ENV]"
+    echo "Usage: ddev cpw-sync [ENV] [--silent]"
     exit 0
 fi
 
@@ -19,10 +19,10 @@ ROCKSHELL_PATH="$DDEV_APPROOT/RockShell"
 
 # Main script execution
 main() {
-    check_env_file_exists
-    load_standard_env_vars "$@"
-    load_ssh_vars
-    load_remote_vars
+    # Parse script arguments
+    parse_silent_flag "$@"
+    
+    validate_and_load_env "${SILENT_ARGS[0]:-}" "$SILENT_FLAG"
     ENV_LOWER=$(to_lower "$ENV")
     HTACCESS_OPTION="$(get_env_var "$PREFIX" HTACCESS_OPTION "$ENV_FILE")"
     check_source_directories

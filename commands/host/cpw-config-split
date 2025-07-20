@@ -16,13 +16,15 @@ source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
     echo "cpw-config-split: Split config.php into config-local.php for a selected environment."
-    echo "Usage: ddev cpw-config-split [ENV]"
+    echo "Usage: ddev cpw-config-split [ENV] [--silent]"
     exit 0
 fi
 
 main() {
-    check_env_file_exists
-    load_standard_env_vars "$@"
+    # Parse script arguments
+    parse_silent_flag "$@"
+    
+    validate_and_load_env "${SILENT_ARGS[0]:-}" "$SILENT_FLAG"
     check_site_directory
     generate_salt_if_missing
     if ! ask_overwrite "$LOCAL_CONFIG" "config-local.php"; then

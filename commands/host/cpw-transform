@@ -11,30 +11,16 @@ source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
     echo "cpw-transform: Update environment folder structure on the remote server."
-    echo "Usage: ddev cpw-transform [ENV]"
+    echo "Usage: ddev cpw-transform [ENV] [--silent] [--lazy]"
     exit 0
 fi
 
-LAZY_MODE=false
-for arg in "$@"; do
-  if [[ "$arg" == "--lazy" ]]; then
-    LAZY_MODE=true
-    set -- "${@/--lazy/}"
-    break
-  fi
-
-done
-
 main() {
-    check_env_file_exists
-    load_env_vars "$@"
+    # Parse all common script arguments
+    parse_script_args "$@"
+    
+    validate_and_load_env "${PARSED_ARGS[0]:-}" "$SILENT_FLAG"
     update_folder_structure
-}
-
-load_env_vars() {
-    load_standard_env_vars "$@"
-    load_ssh_vars
-    load_remote_vars
 }
 
 update_folder_structure() {

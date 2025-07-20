@@ -11,7 +11,7 @@ source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
     echo "cpw-gh-env: Automates setup of GitHub Actions repository variables and secrets for deployment."
-    echo "Usage: ddev cpw-gh-env [ENV]"
+    echo "Usage: ddev cpw-gh-env [ENV] [--silent] [--debug]"
     exit 0
 fi
 
@@ -19,25 +19,10 @@ main() {
     # Export NO_COLOR globally to ensure all gh commands use plain output
     export NO_COLOR=1
     
-    # Check for silent and debug flags
-    local silent_flag=""
-    local debug_mode="false"
-    for arg in "$@"; do
-        if [[ "$arg" == "--silent" ]]; then
-            silent_flag="--silent"
-            # Remove --silent from args before passing environment
-            set -- "${@/--silent/}"
-        elif [[ "$arg" == "--debug" ]]; then
-            debug_mode="true"
-            # Remove --debug from args before passing environment
-            set -- "${@/--debug/}"
-        fi
-    done
+    # Parse script arguments including debug flag
+    parse_script_args "$@"
     
-    # Export debug mode for use in functions
-    export DEBUG_MODE="$debug_mode"
-    
-    validate_and_load_env "${1:-}" "$silent_flag"
+    validate_and_load_env "${PARSED_ARGS[0]:-}" "$SILENT_FLAG"
     check_gh_cli
     check_gh_auth
     check_repo_access

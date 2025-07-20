@@ -159,6 +159,59 @@ sed_inplace() {
 # Compatible lowercase conversion
 to_lower() { echo "$1" | tr '[:upper:]' '[:lower:]'; }
 
+# Comprehensive argument parser for scripts that need multiple flags
+# Usage: parse_script_args "$@"
+# Supports: --lazy, --silent, --debug
+# Sets global variables: LAZY_MODE, SILENT_FLAG, DEBUG_MODE, PARSED_ARGS
+# Example:
+#   parse_script_args "$@"
+#   validate_and_load_env "${PARSED_ARGS[0]:-}" "$SILENT_FLAG"
+parse_script_args() {
+    LAZY_MODE=false
+    SILENT_FLAG=""
+    DEBUG_MODE=false
+    PARSED_ARGS=()
+    
+    for arg in "$@"; do
+        case "$arg" in
+            --lazy)
+                LAZY_MODE=true
+                ;;
+            --silent)
+                SILENT_FLAG="--silent"
+                ;;
+            --debug)
+                DEBUG_MODE=true
+                ;;
+            *)
+                PARSED_ARGS+=("$arg")
+                ;;
+        esac
+    done
+    
+    # Export debug mode for use in functions
+    export DEBUG_MODE
+}
+
+# Lightweight parser for scripts that only need --silent flag
+# Usage: parse_silent_flag "$@"
+# Sets global variables: SILENT_FLAG, SILENT_ARGS
+# Example:
+#   parse_silent_flag "$@"
+#   validate_and_load_env "${SILENT_ARGS[0]:-}" "$SILENT_FLAG"
+parse_silent_flag() {
+    SILENT_FLAG=""
+    SILENT_ARGS=()
+    
+    for arg in "$@"; do
+        if [[ "$arg" == "--silent" ]]; then
+            SILENT_FLAG="--silent"
+        else
+            SILENT_ARGS+=("$arg")
+        fi
+    done
+}
+
 # ================================
 # LOAD ENVIRONMENT FUNCTIONS
 # ================================

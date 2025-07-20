@@ -11,7 +11,7 @@ source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
     echo "cpw-gh-workflow: Generates GitHub Actions workflow YAMLs for each environment/branch pair."
-    echo "Usage: ddev cpw-gh-workflow [ENV]"
+    echo "Usage: ddev cpw-gh-workflow [ENV] [--silent]"
     exit 0
 fi
 
@@ -19,9 +19,10 @@ WORKFLOWS_DIR="$DDEV_APPROOT/.github/workflows"
 
 main() {
     mkdir -p "$WORKFLOWS_DIR"
-    check_env_file_exists
-    load_standard_env_vars "$@"
-    load_github_vars
+    # Parse script arguments
+    parse_silent_flag "$@"
+    
+    validate_and_load_env "${SILENT_ARGS[0]:-}" "$SILENT_FLAG"
     check_repo_access
     get_branches
     select_branch "$@"
