@@ -37,6 +37,7 @@ main() {
     remove_config_lines_from_main
     add_require_to_config
     remove_comments_from_config
+    final_cleanup
 }
 
 # Write a config line to config-local.php
@@ -245,15 +246,72 @@ add_require_to_config() {
 }
 
 remove_comments_from_config() {
+    # Remove comments and normalize whitespace
     awk '
-    BEGIN { inblock=0 }
+    BEGIN { inblock=0; prev_empty=0; prev_line_printed=0 }
     /^\s*\/\*/ { inblock=1; next }
     inblock && /\*\// { inblock=0; next }
     inblock { next }
     /^\s*\/\// { next }
     /^\s*#/ { next }
-    { print }
-  ' "$CONFIG_MAIN" >"$TMP_CONFIG" && mv "$TMP_CONFIG" "$CONFIG_MAIN"
+    /^\s*$/ { 
+        # Track empty lines but do not print immediately
+        if (prev_empty == 0) {
+            prev_empty = 1
+        }
+        next 
+    }
+    { 
+        # If we had an empty line before this non-empty line, print one empty line
+        if (prev_empty == 1 && NR > 1 && prev_line_printed == 1) {
+            print ""
+        }
+        print
+        prev_empty = 0
+        prev_line_printed = 1
+    }
+    ' "$CONFIG_MAIN" > "$TMP_CONFIG" && mv "$TMP_CONFIG" "$CONFIG_MAIN"
+}
+
+final_cleanup() {
+    # Simple cleanup to remove excess blank lines between config statements
+    # First, collapse multiple empty lines into single empty lines
+    sed '/^[[:space:]]*$/N;/^\n$/d' "$CONFIG_MAIN" > "$TMP_CONFIG"
+    
+    # Then format specific sections with proper spacing
+    awk '
+    /^<\?php/ { print $0; print ""; getline; print $0; print ""; next }
+    /^\$config->/ { 
+        if (prev_line == "config") {
+            print $0
+        } else {
+            if (NR > 1 && prev_line != "empty") print ""
+            print $0
+        }
+        prev_line = "config"
+        next
+    }
+    /^require/ { 
+        if (prev_line != "empty") print ""
+        print $0
+        prev_line = "require"
+        next
+    }
+    /^[[:space:]]*$/ { 
+        prev_line = "empty"
+        next
+    }
+    { 
+        if (prev_line == "empty") print ""
+        print $0
+        prev_line = "other"
+    }
+    ' "$TMP_CONFIG" > "$CONFIG_MAIN"
+    
+    # Remove the temp file
+    rm -f "$TMP_CONFIG"
+    
+    log_ok "Config file formatting cleaned up"
 }
 
 main "$@"

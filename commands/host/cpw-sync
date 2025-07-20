@@ -17,14 +17,75 @@ fi
 
 ROCKSHELL_PATH="$DDEV_APPROOT/RockShell"
 
+verify_deployment_path() {
+    echo
+    #log_info "Deployment Safety Check"
+    #log_info "Target: $REMOTE_USER_HOST:$REMOTE_PATH"
+    
+    # Basic safety checks
+    if [ -z "$REMOTE_PATH" ]; then
+        log_fatal "REMOTE_PATH is empty! This could cause deployment to home directory. Aborting."
+        exit 1
+    fi
+    
+    # Check for dangerous patterns
+    if [[ "$REMOTE_PATH" =~ ^/home/[^/]+/?$ ]]; then
+        log_fatal "REMOTE_PATH appears to be a home directory root: $REMOTE_PATH"
+        log_fatal "This could overwrite your entire home directory! Please specify a subdirectory."
+        exit 1
+    fi
+    
+    # Verify remote path exists and is correct
+    if ! ssh -i "$SSH_KEY_PATH" "$REMOTE_USER_HOST" "[ -d '$REMOTE_PATH' ]" 2>/dev/null; then
+        log_error "Remote path '$REMOTE_PATH' does not exist!"
+        log_ask "Create remote directory '$REMOTE_PATH'? [y/N]: "
+        read -r create_dir
+        if [[ ! $create_dir =~ ^[Yy]$ ]]; then
+            log_fatal "Remote path verification failed. Aborting deployment."
+            exit 1
+        fi
+        
+        if ! ssh -i "$SSH_KEY_PATH" "$REMOTE_USER_HOST" "mkdir -p '$REMOTE_PATH'" 2>/dev/null; then
+            log_fatal "Failed to create remote directory '$REMOTE_PATH'. Check permissions."
+            exit 1
+        fi
+        log_ok "Created remote directory: $REMOTE_PATH"
+    fi
+    
+    # Get confirmation unless in silent mode or lazy mode
+    if [ "$SILENT_FLAG" != "--silent" ] && [ "$LAZY_MODE" != "true" ]; then
+        echo
+        log_warn "Syncing to: $REMOTE_USER_HOST:$REMOTE_PATH"
+        log_info "Remote files may be overwritten. Check the path before proceeding!"
+        log_ask "Continue? [Y/n]: "
+        read -r confirm_deploy
+        confirm_deploy=${confirm_deploy:-Y}  # Default to Y if empty
+        if [[ ! $confirm_deploy =~ ^[Yy]$ ]]; then
+            log_info "Deployment cancelled by user."
+            exit 0
+        fi
+    elif [ "$LAZY_MODE" = "true" ]; then
+        log_info "Lazy mode: Auto-accepting deployment to $REMOTE_USER_HOST:$REMOTE_PATH"
+    fi
+    
+    log_ok "Deployment path verified: $REMOTE_PATH"
+}
+
 # Main script execution
 main() {
     # Parse script arguments
-    parse_silent_flag "$@"
+    parse_script_args "$@"
     
-    validate_and_load_env "${SILENT_ARGS[0]:-}" "$SILENT_FLAG"
+    validate_and_load_env "${PARSED_ARGS[0]:-}" "$SILENT_FLAG"
+    
+    # Set PW_ROOT early if not already set
+    PW_ROOT="${PW_ROOT:-$DDEV_DOCROOT}"
+    
     ENV_LOWER=$(to_lower "$ENV")
     HTACCESS_OPTION="$(get_env_var "$PREFIX" HTACCESS_OPTION "$ENV_FILE")"
+    
+    # Safety checks before proceeding
+    verify_deployment_path
     check_source_directories
     update_htaccess
     setup_config
@@ -110,8 +171,31 @@ rsync_deploy() {
         RSYNC_EXCLUDES+=(--exclude-from="$DDEV_APPROOT/.deployignore")
         log_ok "Excluding files and folders listed in .deployignore..."
     fi
+    
     # Change to project root for rsync
     cd "$DDEV_APPROOT"
+    
+    # Show what would be transferred (dry run first for safety)
+    if [ "$SILENT_FLAG" != "--silent" ] && [ "$LAZY_MODE" != "true" ]; then
+        echo
+        log_info "Dry run - showing what would be transferred:"
+        rsync -avz --dry-run --omit-dir-times -e "ssh -i $SSH_KEY_PATH" \
+          "${RSYNC_EXCLUDES[@]}" \
+          . "$REMOTE_USER_HOST:$REMOTE_PATH" | head -20
+        echo "... (showing first 20 items)"
+        echo
+        log_ask "Proceed with actual file transfer? [Y/n]: "
+        read -r proceed_rsync
+        proceed_rsync=${proceed_rsync:-Y}  # Default to Y if empty
+        if [[ ! $proceed_rsync =~ ^[Yy]$ ]]; then
+            log_info "Rsync deployment cancelled by user."
+            exit 0
+        fi
+    elif [ "$LAZY_MODE" = "true" ]; then
+        log_info "Lazy mode: Skipping dry run and confirmation"
+    fi
+    
+    # Actual rsync deployment
     rsync -avz --omit-dir-times -e "ssh -i $SSH_KEY_PATH" \
       "${RSYNC_EXCLUDES[@]}" \
       . "$REMOTE_USER_HOST:$REMOTE_PATH" 2>"$RSYNC_LOG"
@@ -120,12 +204,12 @@ rsync_deploy() {
     if [ $RSYNC_EXIT_CODE -eq 0 ]; then
         log_ok "Deployment completed successfully."
         
-        # Set proper permissions after deployment
+        # Set proper permissions after deployment - ONLY within the deployment path
         log_info "Setting file permissions on remote server..."
-        if ssh -i "$SSH_KEY_PATH" "$REMOTE_USER_HOST" "find $REMOTE_PATH -type d -exec chmod 755 {} + && find $REMOTE_PATH -type f -exec chmod 644 {} +"; then
+        if ssh -i "$SSH_KEY_PATH" "$REMOTE_USER_HOST" "cd '$REMOTE_PATH' && find . -maxdepth 10 -type d -exec chmod 755 {} + 2>/dev/null && find . -maxdepth 10 -type f -exec chmod 644 {} + 2>/dev/null"; then
             log_ok "File permissions set successfully (directories: 755, files: 644)."
         else
-            log_warn "Failed to set file permissions. Files may need manual permission adjustment."
+            log_error "Failed to set file permissions. Files may need manual permission adjustment."
         fi
     elif [ $RSYNC_EXIT_CODE -eq 23 ]; then
         log_warn "Deployment completed with some warnings (exit code 23)."

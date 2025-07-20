@@ -20,6 +20,15 @@ main() {
     parse_silent_flag "$@"
     
     validate_and_load_env "${SILENT_ARGS[0]:-}" "$SILENT_FLAG"
+    
+    # Set environment-specific database variables
+    local db_name_var="${PREFIX}DB_NAME"
+    local db_user_var="${PREFIX}DB_USER"
+    local db_pass_var="${PREFIX}DB_PASS"
+    DB_NAME="${!db_name_var:-}"
+    DB_USER="${!db_user_var:-}"
+    DB_PASS="${!db_pass_var:-}"
+    
     import_database
 }
 

@@ -151,7 +151,7 @@ setup_github_workflows() {
     log_info "To trigger automated deployments, link a branch to the $ENV environment in GitHub."
     ask_user "Select branch now? [Y/n]: "
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        ddev cpw-gh-workflow "$ENV" && log_success "GitHub Actions workflow files generated successfully." || { log_error "Workflow file generation failed!"; exit 1; }
+        ddev cpw-gh-workflow "$ENV" --silent && log_success "GitHub Actions workflow files generated successfully." || { log_error "Workflow file generation failed!"; exit 1; }
     else
         log_warn "Skipping GitHub Actions workflow file generation."
     fi
@@ -162,7 +162,7 @@ setup_config_files() {
     log_info "To separate local and production settings, your config.php will be split, creating a config-local.php for environment-specific overrides."
     ask_user "Create config-local.php? [Y/n]: "
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        ddev cpw-config-split "$ENV" && log_success "config-local setup complete." || { log_error "config-local.php setup failed!"; exit 1; }
+        ddev cpw-config-split "$ENV" --silent && log_success "config-local setup complete." || { log_error "config-local.php setup failed!"; exit 1; }
     else
         log_warn "Skipping config-local.php setup."
     fi
@@ -173,7 +173,7 @@ sync_files() {
     log_info "To deploy your site, all project files need to be uploaded and synced to the $ENV server."
     ask_user "Sync files and deploy to server? [Y/n]: "
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        ddev cpw-sync "$ENV" && log_ok "File sync complete." || { log_error "File sync failed!"; exit 1; }
+        ddev cpw-sync "$ENV" --silent && log_ok "File sync complete." || { log_error "File sync failed!"; exit 1; }
     else
         log_warn "Skipping file sync."
     fi
@@ -184,7 +184,7 @@ import_database() {
     log_info "Import local database to $ENV server to run the site."
     ask_user "Import now? [Y/n]: "
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        ddev cpw-db-import "$ENV" && log_ok "Database import completed successfully." || { log_error "Database import failed!"; exit 1; }
+        ddev cpw-db-import "$ENV" --silent && log_ok "Database import completed successfully." || { log_error "Database import failed!"; exit 1; }
     else
         log_warn "Skipping database import."
     fi
@@ -194,11 +194,11 @@ run_transform() {
     log_header "Environment Folder Structure"
     log_info "A new folder structure is required on the $ENV server for multi-version deployments."
     if [[ "$LAZY_MODE" = true ]]; then
-        ddev cpw-transform "$ENV" --lazy && log_ok "Server file structure updated and permissions set: directories=755, files=644." || { log_error "Folder structure update failed!"; exit 1; }
+        ddev cpw-transform "$ENV" --lazy --silent && log_ok "Server file structure updated and permissions set: directories=755, files=644." || { log_error "Folder structure update failed!"; exit 1; }
     else
         ask_user "Update folder structure? [Y/n]: "
         if [[ $REPLY =~ ^[Yy]$ ]]; then
-            ddev cpw-transform "$ENV" && log_ok "Server file structure updated and permissions set: directories=755, files=644." || { log_error "Folder structure update failed!"; exit 1; }
+            ddev cpw-transform "$ENV" --silent && log_ok "Server file structure updated and permissions set: directories=755, files=644." || { log_error "Folder structure update failed!"; exit 1; }
         else
             log_warn "Skipping server file structure update and permissions fix."
         fi

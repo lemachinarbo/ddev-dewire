@@ -37,9 +37,9 @@ check_repo_access() {
 }
 
 get_branches() {
-    BRANCHES=($(gh api repos/$GITHUB_OWNER/$GITHUB_REPO/branches --jq '.[].name'))
+    BRANCHES=($(gh api repos/$REPO_OWNER/$REPO_NAME/branches --jq '.[].name'))
     if [ ${#BRANCHES[@]} -eq 0 ]; then
-        log_fatal "Repository $GITHUB_OWNER/$GITHUB_REPO has no branches. Please create a main branch and push it to GitHub before running this script."
+        log_fatal "Repository $REPO_OWNER/$REPO_NAME has no branches. Please create a main branch and push it to GitHub before running this script."
         exit 1
     fi
 }
@@ -47,7 +47,7 @@ get_branches() {
 select_branch() {
     resolve_environment "${1:-}" "$ENVIRONMENTS"
     ENV="$SELECTED_ENV"
-    log_info "\nAvailable branches in $GITHUB_REPO (fetched from remote):"
+    log_info "\nAvailable branches in $REPO_NAME (fetched from remote):"
     for i in "${!BRANCHES[@]}"; do
         printf "    %d) %s\n" "$((i+1))" "${BRANCHES[$i]}"
     done
@@ -67,8 +67,8 @@ select_branch() {
             log_ask "Base new branch on which existing branch? (default: main): "
             read BASE_BRANCH
             BASE_BRANCH=${BASE_BRANCH:-main}
-            BASE_SHA=$(gh api repos/$GITHUB_OWNER/$GITHUB_REPO/branches/$BASE_BRANCH --jq .commit.sha)
-            gh api -X POST repos/$GITHUB_OWNER/$GITHUB_REPO/git/refs -f ref="refs/heads/$NEW_BRANCH" -f sha="$BASE_SHA" >/dev/null 2>&1
+            BASE_SHA=$(gh api repos/$REPO_OWNER/$REPO_NAME/branches/$BASE_BRANCH --jq .commit.sha)
+            gh api -X POST repos/$REPO_OWNER/$REPO_NAME/git/refs -f ref="refs/heads/$NEW_BRANCH" -f sha="$BASE_SHA" >/dev/null 2>&1
             if git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git remote get-url origin >/dev/null 2>&1; then
                 git fetch origin "$NEW_BRANCH:$NEW_BRANCH" 2>/dev/null
                 log_ok "Branch '$NEW_BRANCH' created on remote and fetched locally."
