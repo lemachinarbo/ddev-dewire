@@ -11,6 +11,7 @@ project_files:
   - commands/host/cpw-gh-env
   - commands/host/cpw-gh-workflow
   - commands/host/cpw-deploy
+  - commands/host/cpw-git-remote
   - commands/host/cpw-install
   - commands/web/rs
   - commands/host/cpw-sshkeys-gen

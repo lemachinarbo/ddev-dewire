@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+#ddev-generated
+## Description: Initialize git remote and branch setup for GitHub repository
+## Usage: cpw-git-remote [ENV] [--lazy]
+
+set -euo pipefail
+trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
+
+# Source common logging/colors and helpers
+source "$(dirname "$0")/lib/common.sh"
+
+if [[ "${1:-}" == "--help" ]]; then
+    echo "cpw-git-remote: Initialize git remote and branch setup for GitHub repository."
+    echo "Usage: ddev cpw-git-remote [ENV] [--lazy] [--silent]"
+    echo "  ENV: Environment to use (PROD, STAGING, etc.)"
+    echo "  --lazy: Skip confirmations and auto-accept"
+    echo "  --silent: Suppress output messages"
+    exit 0
+fi
+
+main() {
+    # Parse script arguments
+    parse_script_args "$@"
+    
+    # Load environment variables (may prompt for environment selection)
+    validate_and_load_env "${PARSED_ARGS[0]:-}" "$SILENT_FLAG"
+    
+    initialize_git_remote
+}
+
+initialize_git_remote() {
+    REMOTE_URL="git@github.com:$REPO_OWNER/$REPO_NAME.git"
+    
+    if [ "$SILENT_FLAG" != "--silent" ]; then
+        log_info "Initializing git remote..."
+    fi
+    
+    # Set up remote origin
+    if ! git remote get-url origin >/dev/null 2>&1; then
+        git remote add origin "$REMOTE_URL"
+        if [ "$SILENT_FLAG" != "--silent" ]; then
+            log_ok "Added remote 'origin': $REMOTE_URL"
+        fi
+    else
+        git remote set-url origin "$REMOTE_URL"
+        if [ "$SILENT_FLAG" != "--silent" ]; then
+            log_info "Remote 'origin' already exists. Set to SSH URL."
+        fi
+    fi
+    
+    # Fetch remote branch
+    git fetch origin main >/dev/null 2>&1 || true
+    
+    # Check if remote branch exists, create if missing
+    if [ "$(git ls-remote origin main | wc -l)" -eq 0 ]; then
+        if [ "$SILENT_FLAG" != "--silent" ]; then
+            log_info "Remote 'main' branch is empty or missing. Initializing with an empty commit."
+        fi
+        git commit --allow-empty -m "Initial commit"
+        
+        # Check SSH authentication and add key if needed
+        if ! ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
+            if [ "$SILENT_FLAG" != "--silent" ]; then
+                log_warn "SSH authentication to GitHub failed. Attempting to add your public key automatically..."
+            fi
+            if gh ssh-key add "$HOME/.ssh/id_ed25519.pub" --title "Github deployment key" 2>/dev/null; then
+                if [ "$SILENT_FLAG" != "--silent" ]; then
+                    log_ok "SSH key added to your GitHub account."
+                fi
+            else
+                if [ "$SILENT_FLAG" != "--silent" ]; then
+                    log_error "Failed to add SSH key automatically. Please add it manually at: https://github.com/settings/ssh/new"
+                fi
+            fi
+        fi
+        git push -u origin main
+        if [ "$SILENT_FLAG" != "--silent" ]; then
+            log_ok "Initialized remote 'main' branch and set upstream tracking."
+        fi
+    else
+        if [ "$SILENT_FLAG" != "--silent" ]; then
+            log_warn "Remote 'main' branch has content."
+        fi
+        
+        # Check if local branch is empty but remote has content
+        if [ -z "$(git rev-parse HEAD 2>/dev/null)" ]; then
+            log_error "Your local branch is empty, but remote has content."
+            log_fatal "Git repositories must be synchronized before deployment setup can continue."
+            log_info "Please run: git pull origin main"
+            log_info "Then rerun this script."
+            exit 1
+        fi
+        
+        # Check if local branch is tracking remote
+        if ! git rev-parse --abbrev-ref --symbolic-full-name @{u} >/dev/null 2>&1; then
+            if [ "$SILENT_FLAG" != "--silent" ]; then
+                log_info "Setting up upstream tracking for local branch..."
+            fi
+            if git branch --set-upstream-to=origin/main main 2>/dev/null; then
+                if [ "$SILENT_FLAG" != "--silent" ]; then
+                    log_ok "Set local branch 'main' to track 'origin/main'."
+                fi
+            else
+                log_error "Failed to set upstream tracking."
+                log_fatal "Git configuration is required for deployment setup."
+                log_info "Please run: git pull origin main"
+                log_info "Then rerun this script."
+                exit 1
+            fi
+        else
+            if [ "$SILENT_FLAG" != "--silent" ]; then
+                log_ok "Local branch 'main' is already tracking 'origin/main'."
+            fi
+        fi
+    fi
+}
+
+main "$@"

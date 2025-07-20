@@ -11,28 +11,14 @@ source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
     echo "cpw-deploy: Orchestrates all setup and deployment steps for comPWser."
-    echo "Usage: ddev cpw-deploy [ENV]"
+    echo "Usage: ddev cpw-deploy [ENV] [--lazy]"
     exit 0
 fi
 
-for arg in "$@"; do
-  if [[ "$arg" == "--lazy" ]]; then
-    LAZY_MODE=true
-  fi
-  # Remove --lazy from positional args
-  if [[ "$arg" == "--lazy" ]]; then
-    set -- "${@/--lazy/}"
-  fi
-  break
-done    
-
-default_answer() {
-  local prompt="$1"
-  local default="$2"
-  echo "$prompt" "$default"
-}
-
 main() {
+    # Parse script arguments
+    parse_script_args "$@"
+    
     log_header "Welcome to the comPWser Environment Setup tool"
     log_info "This script will guide you through setting up your environment for automated deployments."
     
@@ -40,7 +26,7 @@ main() {
     check_basic_requirements
     
     # Then validate and load environment (this will ask for environment selection)
-    validate_and_load_env "" "${1:-}"
+    validate_and_load_env "${PARSED_ARGS[0]:-}" "$SILENT_FLAG"
     
     # Finally check environment-specific requirements (SSH keys, etc)
     check_env_requirements
@@ -86,39 +72,11 @@ check_env_requirements() {
 }
 
 check_git_remote_and_branch() {
-    REMOTE_URL="git@github.com:$REPO_OWNER/$REPO_NAME.git"
     log_header "Git Repository Initialization"
     log_info "Setting git remote and initializing repository if needed."
     ask_user "Initialize remote repository? [Y/n]: "
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        if ! git remote get-url origin >/dev/null 2>&1; then
-            git remote add origin "$REMOTE_URL"
-        else
-            git remote set-url origin "$REMOTE_URL"
-            log_info "Remote 'origin' already exists. Set to SSH URL."
-        fi
-        git fetch origin main >/dev/null 2>&1 || true
-        # Check if remote branch exists, create if missing
-        if [ "$(git ls-remote origin main | wc -l)" -eq 0 ]; then
-            log_info "Remote 'main' branch is empty or missing. Initializing with an empty commit."
-            git commit --allow-empty -m "Initial commit"
-            if ! ssh -T git@github.com 2>&1 | grep -q "successfully authenticated"; then
-                log_warn "SSH authentication to GitHub failed. Attempting to add your public key automatically..."
-                if gh ssh-key add "$HOME/.ssh/id_ed25519.pub" --title "Github deployment key"; then
-                    log_ok "SSH key added to your GitHub account."
-                else
-                    log_error "Failed to add SSH key automatically. Please add it manually at: https://github.com/settings/ssh/new"
-                fi
-            fi
-            git push -u origin main
-        else
-            log_warn "Remote 'main' branch has content."
-            # Check if local branch is tracking remote
-            if ! git rev-parse --abbrev-ref --symbolic-full-name @{u} >/dev/null 2>&1; then
-                git branch --set-upstream-to=origin/main main
-                log_info "Set local branch 'main' to track 'origin/main'."
-            fi
-        fi
+        ddev cpw-git-remote "$ENV" --silent && log_success "Git remote initialization complete." || { log_error "Git remote initialization failed!"; exit 1; }
     else
         log_warn "Skipped git remote setup and repository initialization. You may encounter authentication issues or workflow errors until the remote is initialized."
     fi
