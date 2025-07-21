@@ -30,9 +30,9 @@ update_folder_structure() {
     fi
     echo
     if [ "$LAZY_MODE" = true ]; then
-        ssh -i "$SSH_KEY_PATH" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && php RockShell/rock rm:transform --lazy && find . -type d -exec chmod 755 {} \; && find . -type f -exec chmod 644 {} \;"
+        ssh -i "$SSH_KEY_PATH" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && php RockShell/rock rm:transform --lazy && find . -type d -exec chmod $CHMOD_DIR {} \; && find . -type f -exec chmod $CHMOD_FILE {} \;"
     else
-        ssh -i "$SSH_KEY_PATH" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && php RockShell/rock rm:transform && find . -type d -exec chmod 755 {} \; && find . -type f -exec chmod 644 {} \;"
+        ssh -i "$SSH_KEY_PATH" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && php RockShell/rock rm:transform && find . -type d -exec chmod $CHMOD_DIR {} \; && find . -type f -exec chmod $CHMOD_FILE {} \;"
     fi
 }
 

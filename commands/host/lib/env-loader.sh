@@ -422,7 +422,15 @@ validate_and_load_env() {
     # Load environment-specific variables for ALL environments
     local environments=$(get_env_environments)
     for env in $environments; do
+        # Load regular environment variables
         for var in "${ENV_REQUIRED_VARS[@]}" "${ENV_OPTIONAL_VARS[@]}"; do
+            local env_var="${env}_${var}"
+            local value=$(get_env_var "" "$env_var" "$ENV_FILE")
+            declare -g "$env_var"="$value"
+        done
+        
+        # Load environment secret variables  
+        for var in "${ENV_SECRET_VARS[@]}"; do
             local env_var="${env}_${var}"
             local value=$(get_env_var "" "$env_var" "$ENV_FILE")
             declare -g "$env_var"="$value"
@@ -441,4 +449,11 @@ validate_and_load_env() {
     SERVER="$REMOTE_USER@$REMOTE_HOST"
     REMOTE_USER_HOST="$REMOTE_USER@$REMOTE_HOST"
     REPO_FULL="$REPO_OWNER/$REPO_NAME"
+    
+    # Set up chmod permissions with defaults
+    local chmod_dir_var="${PREFIX}CHMOD_DIR"
+    local chmod_file_var="${PREFIX}CHMOD_FILE"
+    CHMOD_DIR="${!chmod_dir_var:-755}"
+    CHMOD_FILE="${!chmod_file_var:-644}"
+    
 }

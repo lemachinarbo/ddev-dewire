@@ -206,8 +206,8 @@ rsync_deploy() {
         
         # Set proper permissions after deployment - ONLY within the deployment path
         log_info "Setting file permissions on remote server..."
-        if ssh -i "$SSH_KEY_PATH" "$REMOTE_USER_HOST" "cd '$REMOTE_PATH' && find . -maxdepth 10 -type d -exec chmod 755 {} + 2>/dev/null && find . -maxdepth 10 -type f -exec chmod 644 {} + 2>/dev/null"; then
-            log_ok "File permissions set successfully (directories: 755, files: 644)."
+        if ssh -i "$SSH_KEY_PATH" "$REMOTE_USER_HOST" "cd '$REMOTE_PATH' && find . -maxdepth 10 -type d -exec chmod $CHMOD_DIR {} + 2>/dev/null && find . -maxdepth 10 -type f -exec chmod $CHMOD_FILE {} + 2>/dev/null"; then
+            log_ok "File permissions set successfully (directories: $CHMOD_DIR, files: $CHMOD_FILE)."
         else
             log_error "Failed to set file permissions. Files may need manual permission adjustment."
         fi
