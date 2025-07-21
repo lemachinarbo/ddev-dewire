@@ -26,7 +26,7 @@ main() {
     check_basic_requirements
     
     # Then validate and load environment (this will ask for environment selection)
-    validate_and_load_env "${PARSED_ARGS[0]:-}" "$SILENT_FLAG"
+    validate_and_load_env "${PARSED_ARGS[0]:-}" ""
     
     # Finally check environment-specific requirements (SSH keys, etc)
     check_env_requirements

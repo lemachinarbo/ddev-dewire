@@ -161,8 +161,8 @@ to_lower() { echo "$1" | tr '[:upper:]' '[:lower:]'; }
 
 # Comprehensive argument parser for scripts that need multiple flags
 # Usage: parse_script_args "$@"
-# Supports: --lazy, --silent, --debug
-# Sets global variables: LAZY_MODE, SILENT_FLAG, DEBUG_MODE, PARSED_ARGS
+# Supports: --lazy, --silent, --debug, --local
+# Sets global variables: LAZY_MODE, SILENT_FLAG, DEBUG_MODE, LOCAL_FLAG, PARSED_ARGS
 # Example:
 #   parse_script_args "$@"
 #   validate_and_load_env "${PARSED_ARGS[0]:-}" "$SILENT_FLAG"
@@ -170,6 +170,7 @@ parse_script_args() {
     LAZY_MODE=false
     SILENT_FLAG=""
     DEBUG_MODE=false
+    LOCAL_FLAG=""
     PARSED_ARGS=()
     
     for arg in "$@"; do
@@ -182,6 +183,9 @@ parse_script_args() {
                 ;;
             --debug)
                 DEBUG_MODE=true
+                ;;
+            --local)
+                LOCAL_FLAG="--local"
                 ;;
             *)
                 PARSED_ARGS+=("$arg")

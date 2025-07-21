@@ -365,8 +365,8 @@ validate_and_load_env() {
         debug_mode="true"
     fi
     
-    # Check for silent flag
-    if [ "$debug_flag" = "--silent" ]; then
+    # Check for silent flag (only check global SILENT_FLAG)
+    if [ "$SILENT_FLAG" = "--silent" ]; then
         silent_mode="true"
     fi
     
@@ -391,11 +391,8 @@ validate_and_load_env() {
     
     validate_env_against_schema "$silent_mode"
     
-    # Step 3: Load environment resolution (skip if requested)
-    if [ "$env_arg" = "SKIP_ENV_SELECTION" ]; then
-        if [ "$silent_mode" = "false" ]; then
-            log_ok "Environment selection skipped (local development mode)"
-        fi
+    # Step 3: Environment selection skipped (local development mode)
+    if [ "$debug_flag" = "--local" ]; then
         # Just load base variables without environment-specific ones
         for var in "${REQUIRED_VARS[@]}" "${OPTIONAL_VARS[@]}"; do
             local value=$(get_env_var "" "$var" "$ENV_FILE")
