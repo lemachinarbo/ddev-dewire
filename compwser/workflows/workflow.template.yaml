@@ -53,7 +53,7 @@ jobs:
           echo "BRANCH=$BRANCH" >> $GITHUB_ENV
           # Set PW_ROOT variable (default to 'public' if not set)
           echo "PW_ROOT=${{ env.PW_ROOT }}" >> $GITHUB_ENV
-          echo "DEPLOY_FOLDER=${{ env.DEPLOY_PATH }}/tmp-$DEPLOY_NAME" >> $GITHUB_ENV
+          echo "DEPLOY_FOLDER=${{ env.PATH }}/tmp-$DEPLOY_NAME" >> $GITHUB_ENV
           echo "SRC=${{ github.workspace }}" >> $GITHUB_ENV
           echo "BRANCH: $BRANCH"
           echo "DEPLOY_PATH: ${{ env.DEPLOY_PATH }}"
@@ -66,7 +66,7 @@ jobs:
         run: |
           install -m 600 -D /dev/null ~/.ssh/id_rsa
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
-          echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          echo "${{ vars.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
       - name: 🚚 Deploy via RSYNC and Set Permissions
         run: |
