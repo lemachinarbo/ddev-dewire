@@ -17,11 +17,25 @@ fi
 
 main() {
     # Parse script arguments
-    parse_silent_flag "$@"
+    parse_script_args "$@"
     
-    validate_and_load_env "${SILENT_ARGS[0]:-}" "$SILENT_FLAG"
+    validate_and_load_env "${PARSED_ARGS[0]:-}" "$SILENT_FLAG"
+
+    # Set PW_ROOT early if not already set
+    PW_ROOT="${PW_ROOT:-$DDEV_DOCROOT}"
     
-    # Set environment-specific database variables
+    import_database
+}
+
+import_database() {
+    echo
+
+    if [ -z "$REMOTE_USER" ] || [ -z "$REMOTE_HOST" ] || [ -z "$REMOTE_PATH" ]; then
+        log_fatal "One or more required variables (SSH_USER, SSH_HOST, DEPLOY_PATH) are empty. Check your .env file for ${ENV}_SSH_USER, ${ENV}_SSH_HOST, and ${ENV}_PATH."
+        exit 1
+    fi
+    
+    # Get environment-specific database variables (same approach as env-loader.sh)
     local db_name_var="${PREFIX}DB_NAME"
     local db_user_var="${PREFIX}DB_USER"
     local db_pass_var="${PREFIX}DB_PASS"
@@ -29,14 +43,11 @@ main() {
     DB_USER="${!db_user_var:-}"
     DB_PASS="${!db_pass_var:-}"
     
-    import_database
-}
-
-import_database() {
-    if [ -z "$REMOTE_USER" ] || [ -z "$REMOTE_HOST" ] || [ -z "$REMOTE_PATH" ] || [ -z "$DB_NAME" ] || [ -z "$DB_USER" ] || [ -z "$DB_PASS" ]; then
-        log_fatal "One or more required variables (SSH_USER, SSH_HOST, DEPLOY_PATH, DB_NAME, DB_USER, DB_PASS) are empty. Check your .env file for all required variables."
+    if [ -z "$DB_NAME" ] || [ -z "$DB_USER" ] || [ -z "$DB_PASS" ]; then
+        log_fatal "One or more required database variables (DB_NAME, DB_USER, DB_PASS) are empty. Check your .env file for ${ENV}_DB_NAME, ${ENV}_DB_USER, and ${ENV}_DB_PASS."
         exit 1
     fi
+    
     # Use PW_ROOT if set, else default to empty string
     local pw_root="${PW_ROOT:-}"
     local db_sql_path="${pw_root:+$pw_root/}site/assets/backups/database/db.sql"
