@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #ddev-generated
 ## Description: Install and bootstrap ProcessWire project
-## Usage: cpw-install
+## Usage: dw-install
 
 set -eu
 trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
@@ -10,8 +10,8 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
-    echo "cpw-install: Install and bootstrap ProcessWire project."
-    echo "Usage: ddev cpw-install [--silent] [--debug]"
+    echo "dw-install: Install and bootstrap ProcessWire project."
+    echo "Usage: ddev dw-install [--silent] [--debug]"
     echo "  --silent   Suppress output"
     echo "  --debug    Enable detailed debug output"
     exit 0
@@ -231,7 +231,7 @@ ddev_restart() {
 status_complete() {
     log_header 'Processwire installation completed!'
     log_info "The ProcessWire project has been set up successfully and is ready to use."
-    log_info "To enable workflow deployment, remember to update the .env file and then run 'ddev cpw-deploy'."
+    log_info "To enable workflow deployment, remember to update the .env file and then run 'ddev dw-deploy'."
     echo
 }
 

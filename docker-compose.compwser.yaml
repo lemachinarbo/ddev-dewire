@@ -2,8 +2,8 @@
 # Simple template to demonstrate compwser
 services:
   compwser:
-    container_name: ddev-${DDEV_SITENAME}-compwser
-    image: ${COMPWSER_DOCKER_IMAGE:-busybox:stable}
+    container_name: ddev-${DDEV_SITENAME}-dewired
+    image: ${DEWIRED_DOCKER_IMAGE:-busybox:stable}
     command: tail -f /dev/null
     restart: "no"
     # These labels ensure this service is discoverable by DDEV.

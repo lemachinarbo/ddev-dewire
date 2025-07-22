@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #ddev-generated
 ## Description: Generates GitHub Actions workflow YAMLs for each environment/branch pair
-## Usage: cpw-gh-workflow [ENV]
+## Usage: dw-gh-workflow [ENV]
 
 set -euo pipefail
 trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
@@ -10,8 +10,8 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
-    echo "cpw-gh-workflow: Generates GitHub Actions workflow YAMLs for each environment/branch pair."
-    echo "Usage: ddev cpw-gh-workflow [ENV] [--silent]"
+    echo "dw-gh-workflow: Generates GitHub Actions workflow YAMLs for each environment/branch pair."
+    echo "Usage: ddev dw-gh-workflow [ENV] [--silent]"
     exit 0
 fi
 

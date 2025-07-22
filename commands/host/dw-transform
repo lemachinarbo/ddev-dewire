@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #ddev-generated
 ## Description: Update environment folder structure on the remote server
-## Usage: cpw-transform [ENV]
+## Usage: dw-transform [ENV]
 
 set -euo pipefail
 trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
@@ -10,8 +10,8 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
-    echo "cpw-transform: Update environment folder structure on the remote server."
-    echo "Usage: ddev cpw-transform [ENV] [--silent] [--lazy]"
+    echo "dw-transform: Update environment folder structure on the remote server."
+    echo "Usage: ddev dw-transform [ENV] [--silent] [--lazy]"
     exit 0
 fi
 

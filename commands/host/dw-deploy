@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #ddev-generated
 ## Description: Automate all setup and deployment steps for publishing your site to any environment
-## Usage: cpw-deploy [ENV]
+## Usage: dw-deploy [ENV]
 
 set -euo pipefail
 trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
@@ -10,8 +10,8 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
-    echo "cpw-deploy: Orchestrates all setup and deployment steps for comPWser."
-    echo "Usage: ddev cpw-deploy [ENV] [--lazy]"
+    echo "dw-deploy: Orchestrates all setup and deployment steps for DeWired."
+    echo "Usage: ddev dw-deploy [ENV] [--lazy]"
     exit 0
 fi
 
@@ -19,7 +19,7 @@ main() {
     # Parse script arguments
     parse_script_args "$@"
     
-    log_header "Welcome to the comPWser Environment Setup tool"
+    log_header "Welcome to the DeWired Environment Setup tool"
     log_info "This script will guide you through setting up your environment for automated deployments."
     
     # First check basic requirements (tools, files, etc)
@@ -76,7 +76,7 @@ check_git_remote_and_branch() {
     log_info "Setting git remote and initializing repository if needed."
     ask_user "Initialize remote repository? [Y/n]: "
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        ddev cpw-git-remote "$ENV" --silent && log_success "Git remote initialization complete." || { log_error "Git remote initialization failed!"; exit 1; }
+        ddev dw-git-remote "$ENV" --silent && log_success "Git remote initialization complete." || { log_error "Git remote initialization failed!"; exit 1; }
     else
         log_warn "Skipped git remote setup and repository initialization. You may encounter authentication issues or workflow errors until the remote is initialized."
     fi
@@ -87,7 +87,7 @@ setup_ssh_keys() {
     log_info "Allows automated deployments with passwordless SSH access."
     ask_user "Install keys now? [Y/n]: "
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        ddev cpw-sshkeys-install "$ENV" --silent && log_success "SSH key installation and authentication test complete." || { log_error "SSH key installation failed!"; exit 1; }
+        ddev dw-sshkeys-install "$ENV" --silent && log_success "SSH key installation and authentication test complete." || { log_error "SSH key installation failed!"; exit 1; }
     else
         log_warn "Skipping SSH key installation."
     fi
@@ -98,7 +98,7 @@ setup_github_actions() {
     log_info "Automated deployment requires secrets and variables set in the GitHub $ENV environment"
     ask_user "Run GitHub Actions setup? [Y/n]: "
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        ddev cpw-gh-env "$ENV" --silent && log_success "All GitHub Actions variables and secrets have been processed successfully." || { log_error "GitHub setup failed!"; exit 1; }
+        ddev dw-gh-env "$ENV" --silent && log_success "All GitHub Actions variables and secrets have been processed successfully." || { log_error "GitHub setup failed!"; exit 1; }
     else
         log_warn "Skipping GitHub Actions setup."
     fi
@@ -109,7 +109,7 @@ setup_github_workflows() {
     log_info "To trigger automated deployments, link a branch to the $ENV environment in GitHub."
     ask_user "Select branch now? [Y/n]: "
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        ddev cpw-gh-workflow "$ENV" --silent && log_success "GitHub Actions workflow files generated successfully." || { log_error "Workflow file generation failed!"; exit 1; }
+        ddev dw-gh-workflow "$ENV" --silent && log_success "GitHub Actions workflow files generated successfully." || { log_error "Workflow file generation failed!"; exit 1; }
     else
         log_warn "Skipping GitHub Actions workflow file generation."
     fi
@@ -120,7 +120,7 @@ setup_config_files() {
     log_info "To separate local and production settings, your config.php will be split, creating a config-local.php for environment-specific overrides."
     ask_user "Create config-local.php? [Y/n]: "
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        ddev cpw-config-split "$ENV" --silent && log_success "config-local setup complete." || { log_error "config-local.php setup failed!"; exit 1; }
+        ddev dw-config-split "$ENV" --silent && log_success "config-local setup complete." || { log_error "config-local.php setup failed!"; exit 1; }
     else
         log_warn "Skipping config-local.php setup."
     fi
@@ -131,7 +131,7 @@ sync_files() {
     log_info "To deploy your site, all project files need to be uploaded and synced to the $ENV server."
     ask_user "Sync files and deploy to server? [Y/n]: "
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        ddev cpw-sync "$ENV" --silent && log_ok "File sync complete." || { log_error "File sync failed!"; exit 1; }
+        ddev dw-sync "$ENV" --silent && log_ok "File sync complete." || { log_error "File sync failed!"; exit 1; }
     else
         log_warn "Skipping file sync."
     fi
@@ -142,7 +142,7 @@ import_database() {
     log_info "Import local database to $ENV server to run the site."
     ask_user "Import now? [Y/n]: "
     if [[ $REPLY =~ ^[Yy]$ ]]; then
-        ddev cpw-db-import "$ENV" --silent && log_ok "Database import completed successfully." || { log_error "Database import failed!"; exit 1; }
+        ddev dw-db-import "$ENV" --silent && log_ok "Database import completed successfully." || { log_error "Database import failed!"; exit 1; }
     else
         log_warn "Skipping database import."
     fi
@@ -152,11 +152,11 @@ run_transform() {
     log_header "Environment Folder Structure"
     log_info "A new folder structure is required on the $ENV server for multi-version deployments."
     if [[ "$LAZY_MODE" = true ]]; then
-        ddev cpw-transform "$ENV" --lazy --silent && log_ok "Server file structure updated and permissions set: directories=755, files=644." || { log_error "Folder structure update failed!"; exit 1; }
+        ddev dw-transform "$ENV" --lazy --silent && log_ok "Server file structure updated and permissions set: directories=755, files=644." || { log_error "Folder structure update failed!"; exit 1; }
     else
         ask_user "Update folder structure? [Y/n]: "
         if [[ $REPLY =~ ^[Yy]$ ]]; then
-            ddev cpw-transform "$ENV" --silent && log_ok "Server file structure updated and permissions set: directories=755, files=644." || { log_error "Folder structure update failed!"; exit 1; }
+            ddev dw-transform "$ENV" --silent && log_ok "Server file structure updated and permissions set: directories=755, files=644." || { log_error "Folder structure update failed!"; exit 1; }
         else
             log_warn "Skipping server file structure update and permissions fix."
         fi
@@ -232,7 +232,7 @@ check_generate_ssh_keys_if_missing() {
         read gen_keys
         gen_keys=${gen_keys:-y}
         if [[ $gen_keys =~ ^[Yy]$ ]]; then
-            ddev cpw-sshkeys-gen || { log_fatal "SSH key generation failed!"; exit 1; }
+            ddev dw-sshkeys-gen || { log_fatal "SSH key generation failed!"; exit 1; }
         fi
         # Re-check for keys after generation
         if [ -f "$HOME/.ssh/id_ed25519" ] && [ -f "$SSH_KEY_PATH" ]; then

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #ddev-generated
 ## Description: Sync files to the selected environment's server using rsync and environment-prefixed variables
-## Usage: cpw-sync [ENV]
+## Usage: dw-sync [ENV]
 
 set -euo pipefail
 trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
@@ -10,8 +10,8 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
-    echo "cpw-sync: Sync files to the selected environment's server using rsync."
-    echo "Usage: ddev cpw-sync [ENV] [--silent]"
+    echo "dw-sync: Sync files to the selected environment's server using rsync."
+    echo "Usage: ddev dw-sync [ENV] [--silent]"
     exit 0
 fi
 

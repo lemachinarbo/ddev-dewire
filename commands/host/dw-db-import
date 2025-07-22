@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #ddev-generated
 ## Description: Import local database to remote server for selected environment
-## Usage: cpw-db-import [ENV]
+## Usage: dw-db-import [ENV]
 
 set -euo pipefail
 trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
@@ -10,8 +10,8 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
-    echo "cpw-db-import: Import local database to remote server for selected environment."
-    echo "Usage: ddev cpw-db-import [ENV] [--silent]"
+    echo "dw-db-import: Import local database to remote server for selected environment."
+    echo "Usage: ddev dw-db-import [ENV] [--silent]"
     exit 0
 fi
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #ddev-generated
 ## Description: Initialize git remote and branch setup for GitHub repository
-## Usage: cpw-git-remote [ENV] [--lazy]
+## Usage: dw-git-remote [ENV] [--lazy]
 
 set -euo pipefail
 trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
@@ -10,8 +10,8 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
-    echo "cpw-git-remote: Initialize git remote and branch setup for GitHub repository."
-    echo "Usage: ddev cpw-git-remote [ENV] [--lazy] [--silent]"
+    echo "dw-git-remote: Initialize git remote and branch setup for GitHub repository."
+    echo "Usage: ddev dw-git-remote [ENV] [--lazy] [--silent]"
     echo "  ENV: Environment to use (PROD, STAGING, etc.)"
     echo "  --lazy: Skip confirmations and auto-accept"
     echo "  --silent: Suppress output messages"

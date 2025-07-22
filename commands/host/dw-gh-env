@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #ddev-generated
 ## Description: Automates setup of GitHub Actions repository variables and secrets for deployment using GitHub CLI (gh), with multi-environment support
-## Usage: cpw-gh-env [ENV]
+## Usage: dw-gh-env [ENV]
 
 set -euo pipefail
 trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
@@ -10,8 +10,8 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
-    echo "cpw-gh-env: Automates setup of GitHub Actions repository variables and secrets for deployment."
-    echo "Usage: ddev cpw-gh-env [ENV] [--silent] [--debug]"
+    echo "dw-gh-env: Automates setup of GitHub Actions repository variables and secrets for deployment."
+    echo "Usage: ddev dw-gh-env [ENV] [--silent] [--debug]"
     exit 0
 fi
 

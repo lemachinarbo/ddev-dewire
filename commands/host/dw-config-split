@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #ddev-generated
 ## Description: Split config.php into config-local.php for a selected environment
-## Usage: cpw-config-split [ENV]
+## Usage: dw-config-split [ENV]
 
 set -euo pipefail
 trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
@@ -15,8 +15,8 @@ TMP_CONFIG="$CONFIG_MAIN.tmp"
 source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
-    echo "cpw-config-split: Split config.php into config-local.php for a selected environment."
-    echo "Usage: ddev cpw-config-split [ENV] [--silent]"
+    echo "dw-config-split: Split config.php into config-local.php for a selected environment."
+    echo "Usage: ddev dw-config-split [ENV] [--silent]"
     exit 0
 fi
 
