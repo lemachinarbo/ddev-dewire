@@ -11,9 +11,10 @@ source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
     echo "dw-install: Install and bootstrap ProcessWire project."
-    echo "Usage: ddev dw-install [--silent] [--debug]"
-    echo "  --silent   Suppress output"
-    echo "  --debug    Enable detailed debug output"
+    echo "Usage: ddev dw-install [--silent] [--debug] [--no-restart]"
+    echo "  --silent      Suppress output"
+    echo "  --debug       Enable detailed debug output"
+    echo "  --no-restart  Skip DDEV restart"
     exit 0
 fi
 
@@ -23,11 +24,16 @@ main() {
     # Parse script arguments
     parse_script_args "$@"
     
-    # Always use local mode for installation (never prompt for environment)
-    validate_and_load_env "" "--local"
+    # Use local mode (never prompt for environment selection)
+    # Enable permissive mode by setting environment variable before call
+    ALLOW_MISSING_ENV="true" validate_and_load_env "" "--local"
     update_ddev_config
-    #temporaly disable for testing purposes
-    ddev_restart 
+    
+    # Check if --no-restart flag is present
+    if [[ ! " $* " =~ " --no-restart " ]]; then
+        ddev_restart 
+    fi
+    
     copy_files
     install_composer
     install_rockshell
@@ -198,25 +204,25 @@ cleanup_pw_files() {
         log_warn 'RockMigrations submodule not present, skipping clean/reset'
     fi
     if [ -f $DEFAULT_DOCROOT/README.md ]; then
-        rm $DEFAULT_DOCROOT/README.md && log_ok '$DEFAULT_DOCROOT/README.md deleted.'
+        rm $DEFAULT_DOCROOT/README.md && log_ok "$DEFAULT_DOCROOT/README.md deleted."
     else
         log_warn 'README.md not found'
     fi
 
     if [ -f $DEFAULT_DOCROOT/CONTRIBUTING.md ]; then
-        rm $DEFAULT_DOCROOT/CONTRIBUTING.md && log_ok '$DEFAULT_DOCROOT/CONTRIBUTING.md deleted.'
+        rm $DEFAULT_DOCROOT/CONTRIBUTING.md && log_ok "$DEFAULT_DOCROOT/CONTRIBUTING.md deleted."
     else
         log_warn 'CONTRIBUTING.md not found'
     fi
 
     if [ -f $DEFAULT_DOCROOT/LICENSE.TXT ]; then
-        rm $DEFAULT_DOCROOT/LICENSE.TXT && log_ok '$DEFAULT_DOCROOT/LICENSE.TXT deleted.'
+        rm $DEFAULT_DOCROOT/LICENSE.TXT && log_ok "$DEFAULT_DOCROOT/LICENSE.TXT deleted."
     else
         log_warn 'LICENSE.TXT not found'
     fi
 
     if [ -f $DEFAULT_DOCROOT/composer.json ]; then
-        rm $DEFAULT_DOCROOT/composer.json && log_ok '$DEFAULT_DOCROOT/composer.json deleted.'
+        rm $DEFAULT_DOCROOT/composer.json && log_ok "$DEFAULT_DOCROOT/composer.json deleted."
     else
         log_warn 'ProcessWire composer.json not found'
     fi

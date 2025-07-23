@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Environment Loader - Schema-driven .env validation and loading
+# Environment Loader - Schema-driven .env validation and loading v2
 # This file contains all environment-related functions
 
 ENV_FILE=".env"
@@ -12,7 +12,9 @@ get_env_var() {
     local prefix="$1"
     local var="$2"
     local env_file="$3"
-    grep "^${prefix}${var}=" "$env_file" | cut -d'=' -f2-
+    if [ -f "$env_file" ]; then
+        grep "^${prefix}${var}=" "$env_file" | cut -d'=' -f2-
+    fi
 }
 
 # Usage: get_env_default <VAR> <DEFAULT>
@@ -26,13 +28,20 @@ get_env_default() {
 
 get_env_environments() {
     local env_file="${1:-$ENV_FILE}"
-    grep '^ENVIRONMENTS=' "$env_file" | cut -d'=' -f2- | tr -d '"'
+    if [ -f "$env_file" ]; then
+        grep '^ENVIRONMENTS=' "$env_file" | cut -d'=' -f2- | tr -d '"'
+    fi
 }
 
 check_env_file_exists() {
+    local permissive="${1:-false}"
     if [ ! -f "$ENV_FILE" ]; then
-        log_fatal ".env file not found at $ENV_FILE. Aborting."
-        exit 1
+        if [ "$permissive" = "true" ]; then
+            return 1
+        else
+            log_fatal ".env file not found at $ENV_FILE. Aborting."
+            exit 1
+        fi
     fi
 }
 
@@ -312,6 +321,14 @@ validate_env_against_schema() {
     local validation_errors=0
     local missing_vars=()
     
+    # Skip validation if .env file doesn't exist
+    if [ ! -f "$ENV_FILE" ]; then
+        if [ "$silent_mode" = "false" ]; then
+            log_warn "Skipping validation - .env file not found"
+        fi
+        return
+    fi
+    
     # Helper function to validate a variable
     validate_var() {
         local var="$1"
@@ -359,29 +376,59 @@ validate_and_load_env() {
     local debug_flag="${2:-}"
     local debug_mode="false"
     local silent_mode="false"
-    
+    local permissive_mode="false"
+    local local_mode="false"
+
     # Check for debug flag or environment variable
     if [ "$debug_flag" = "--debug" ] || [ "${DEBUG_ENV_LOADER:-false}" = "true" ]; then
         debug_mode="true"
     fi
-    
+
     # Check for silent flag (only check global SILENT_FLAG)
     if [ "$SILENT_FLAG" = "--silent" ]; then
         silent_mode="true"
     fi
-    
+
+    # Check for permissive mode (allow missing .env) via --no-env
+    if [ "$debug_flag" = "--no-env" ] || [ "${ALLOW_MISSING_ENV:-false}" = "true" ]; then
+        permissive_mode="true"
+    fi
+
+    # Check for local mode (skip environment selection)
+    if [ "$debug_flag" = "--local" ]; then
+        local_mode="true"
+    fi
+
     if [ "$silent_mode" = "false" ]; then
         log_info "Checking .env file:"
     fi
+
+    # Step 1: Parse schema first (needed for variable arrays)
+    # In permissive mode with no .env file, parse schema silently
+    local schema_silent_mode="$silent_mode"
+    if [ "$permissive_mode" = "true" ] && [ ! -f "$ENV_FILE" ]; then
+        schema_silent_mode="true"
+    fi
+    parse_env_schema "$schema_silent_mode"
     
-    # Step 1: Check .env file exists
-    check_env_file_exists
+    # Step 2: Check .env file exists
+    if ! check_env_file_exists "$permissive_mode"; then
+        if [ "$permissive_mode" = "true" ]; then
+            if [ "$silent_mode" = "false" ]; then
+                log_warn ".env file not found, using installer defaults."
+            fi
+            # Set defaults for required/optional vars
+            for var in "${REQUIRED_VARS[@]}" "${OPTIONAL_VARS[@]}"; do
+                declare -g "$var"=""
+            done
+            return
+        else
+            exit 1
+        fi
+    fi
     if [ "$silent_mode" = "false" ]; then
         log_ok "Found .env file at $ENV_FILE"
     fi
-    
-    # Step 2: Parse schema and validate
-    parse_env_schema "$silent_mode"
     
     if [ "$debug_mode" = "true" ]; then
         echo
@@ -389,10 +436,13 @@ validate_and_load_env() {
         display_config_tables
     fi
     
-    validate_env_against_schema "$silent_mode"
+    # Only validate if .env file exists
+    if [ -f "$ENV_FILE" ]; then
+        validate_env_against_schema "$silent_mode"
+    fi
     
     # Step 3: Environment selection skipped (local development mode)
-    if [ "$debug_flag" = "--local" ]; then
+    if [ "$local_mode" = "true" ]; then
         # Just load base variables without environment-specific ones
         for var in "${REQUIRED_VARS[@]}" "${OPTIONAL_VARS[@]}"; do
             local value=$(get_env_var "" "$var" "$ENV_FILE")
