@@ -1,7 +1,7 @@
 [![add-on registry](https://img.shields.io/badge/DDEV-Add--on_Registry-blue)](https://addons.ddev.com)
-[![tests](https://github.com/lemachinarbo/ddev-DeWire/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/lemachinarbo/ddev-DeWire/actions/workflows/tests.yml?query=branch%3Amain)
-[![last commit](https://img.shields.io/github/last-commit/lemachinarbo/ddev-DeWire)](https://github.com/lemachinarbo/ddev-DeWire/commits)
-[![release](https://img.shields.io/github/v/release/lemachinarbo/ddev-DeWire)](https://github.com/lemachinarbo/ddev-DeWire/releases/latest)
+[![tests](https://github.com/lemachinarbo/ddev-dewire/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/lemachinarbo/ddev-dewire/actions/workflows/tests.yml?query=branch%3Amain)
+[![last commit](https://img.shields.io/github/last-commit/lemachinarbo/ddev-DeWire)](https://github.com/lemachinarbo/ddev-dewire/commits)
+[![release](https://img.shields.io/github/v/release/lemachinarbo/ddev-dewire)](https://github.com/lemachinarbo/ddev-dewire/releases/latest)
 
 # DDEV DeWire
 Simplify ProcessWire deployments with a single DDEV command: **De**fine once, **De**ploy everywhere.
@@ -32,7 +32,7 @@ ddev add-on get lemachinarbo/ddev-dewire
 
 ### 1. Installing Processwire
 
-`ddev dw-install`* – Installs ProcessWire. No prerequisites required.*
+`ddev dw-install` *Installs ProcessWire. No prerequisites required.*
 
 ```bash
 mkdir myproject
@@ -44,7 +44,7 @@ ddev dw-install
 
 ### 2. Set up deployment
 
-`ddev dw-deploy`* – Automates deployment to production, staging, or dev. Requires GitHub CLI, SSH keys, a personal access tokenm and a .env file.*
+`ddev dw-deploy` *Automates deployment to production, staging, or dev. Requires GitHub CLI, SSH keys, a personal access tokenm and a .env file.*
 
 To enable GitHub deployments, do a quick one-time setup:
 
@@ -94,13 +94,13 @@ And then just run:
 ddev dewire
 ```
 
-Nice. Time to enjoy some cake.
+Nice. Time to enjoy some [cake](https://en.wikipedia.org/wiki/The_cake_is_a_lie).
 
 
 ## Guides
 
-- How to [Install Processwire](wiki/How-to-‐-Install-Processwire#installing-from-zero) from zero
-- How to [customize Processwire installation](https://github.com/lemachinarbo/ddev-compwser/wiki/How-to-%E2%80%90-Install-Processwire#customizing-your-installation)
+- How to [Install Processwire](../wiki/How-to-‐-Install-Processwire#installing-from-zero) from zero
+- How to [customize Processwire installation](../wiki/How-to-‐-Install-Processwire#customizing-your-installation)
 
 --- 
 
