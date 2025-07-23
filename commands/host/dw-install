@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #ddev-generated
 ## Description: Install and bootstrap ProcessWire project
-## Usage: cpw-install
+## Usage: dw-install
 
 set -eu
 trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
@@ -10,17 +10,32 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
-    echo "cpw-install: Install and bootstrap ProcessWire project."
-    echo "Usage: ddev cpw-install"
+    echo "dw-install: Install and bootstrap ProcessWire project."
+    echo "Usage: ddev dw-install [--silent] [--debug] [--no-restart]"
+    echo "  --silent      Suppress output"
+    echo "  --debug       Enable detailed debug output"
+    echo "  --no-restart  Skip DDEV restart"
     exit 0
 fi
 
 DEFAULT_DOCROOT="public"
 
 main() {
+    # Parse script arguments
+    parse_script_args "$@"
+    
+    # Use local mode (never prompt for environment selection)
+    # Enable permissive mode by setting environment variable before call
+    ALLOW_MISSING_ENV="true" validate_and_load_env "" "--local"
     update_ddev_config
-    ddev_restart
+    
+    # Check if --no-restart flag is present
+    if [[ ! " $* " =~ " --no-restart " ]]; then
+        ddev_restart 
+    fi
+    
     copy_files
+    install_composer
     install_rockshell
     install_processwire
     install_rockmigrations
@@ -41,7 +56,24 @@ update_ddev_config() {
 
 TEMPLATES_PATH="$APP_PATH/templates"
 
-copy_templates() {
+copy_file() {
+    local template="$1"
+    local target="$2"
+    local label
+    label="$(basename "$target")"
+    if [ -f "$target" ]; then
+        log_warn "$label already exists, skipping copy."
+    elif [ -f "$TEMPLATES_PATH/$template" ]; then
+        cp "$TEMPLATES_PATH/$template" "$target"
+        log_ok "$label template copied to project root."
+    else
+        log_warn "$template template not found in $TEMPLATES_PATH/"
+    fi
+}
+
+copy_files() {
+    log_header "Init git & copy templates..."
+    
     # Init git if not already initialized
     if [ -d .git ]; then
         log_warn 'Git repository already initialized.'
@@ -53,40 +85,10 @@ copy_templates() {
             exit 1
         fi
     fi
-    # Copy .gitignore template to project root if it exists
-    if [ -f "$TEMPLATES_PATH/.gitignore.example" ]; then
-        cp "$TEMPLATES_PATH/.gitignore.example" .gitignore
-        log_ok '.gitignore template copied to project root.'
-    else
-        log_warn '.gitignore template not found in $TEMPLATES_PATH/'
-    fi
-    # Copy composer.json template to project root if it exists
-    if [ -f "$TEMPLATES_PATH/composer.template.json" ]; then
-        cp "$TEMPLATES_PATH/composer.template.json" composer.json
-        log_ok 'composer.json template copied to project root.'
-    else
-        log_warn 'composer.template.json template not found in $TEMPLATES_PATH/'
-    fi
-}
-
-copy_env_file() {
-    # Create .env file from template if it does not exist
-    local env_file=".env"
-    local example_file="$TEMPLATES_PATH/.env.example"
-    if [ ! -f "$env_file" ]; then
-        if [ -f "$example_file" ]; then
-            cp "$example_file" "$env_file"
-            log_ok ".env file created from template."
-        else
-            log_error ".env.example template not found at $example_file. Cannot create .env file."
-        fi
-    fi
-}
-
-copy_files() {
-    log_header "Init git & copy templates..."
-    copy_templates
-    copy_env_file
+    copy_file ".gitignore.example" ".gitignore"
+    copy_file ".deployignore.example" ".deployignore"
+    copy_file "composer.template.json" "composer.json"
+    copy_file ".env.example" ".env"
 }
 
 add_submodule() {
@@ -105,6 +107,16 @@ add_submodule() {
             log_fatal "Failed to add $path submodule."
             exit 1
         fi
+    fi
+}
+
+install_composer() {
+    log_header "Installing Composer dependencies..."
+    if ddev composer install; then
+        log_ok "Composer dependencies installed."
+    else
+        log_error "Composer install failed."
+        exit 1
     fi
 }
 
@@ -192,25 +204,25 @@ cleanup_pw_files() {
         log_warn 'RockMigrations submodule not present, skipping clean/reset'
     fi
     if [ -f $DEFAULT_DOCROOT/README.md ]; then
-        rm $DEFAULT_DOCROOT/README.md && log_ok '$DEFAULT_DOCROOT/README.md deleted.'
+        rm $DEFAULT_DOCROOT/README.md && log_ok "$DEFAULT_DOCROOT/README.md deleted."
     else
         log_warn 'README.md not found'
     fi
 
     if [ -f $DEFAULT_DOCROOT/CONTRIBUTING.md ]; then
-        rm $DEFAULT_DOCROOT/CONTRIBUTING.md && log_ok '$DEFAULT_DOCROOT/CONTRIBUTING.md deleted.'
+        rm $DEFAULT_DOCROOT/CONTRIBUTING.md && log_ok "$DEFAULT_DOCROOT/CONTRIBUTING.md deleted."
     else
         log_warn 'CONTRIBUTING.md not found'
     fi
 
     if [ -f $DEFAULT_DOCROOT/LICENSE.TXT ]; then
-        rm $DEFAULT_DOCROOT/LICENSE.TXT && log_ok '$DEFAULT_DOCROOT/LICENSE.TXT deleted.'
+        rm $DEFAULT_DOCROOT/LICENSE.TXT && log_ok "$DEFAULT_DOCROOT/LICENSE.TXT deleted."
     else
         log_warn 'LICENSE.TXT not found'
     fi
 
     if [ -f $DEFAULT_DOCROOT/composer.json ]; then
-        rm $DEFAULT_DOCROOT/composer.json && log_ok '$DEFAULT_DOCROOT/composer.json deleted.'
+        rm $DEFAULT_DOCROOT/composer.json && log_ok "$DEFAULT_DOCROOT/composer.json deleted."
     else
         log_warn 'ProcessWire composer.json not found'
     fi
@@ -225,7 +237,7 @@ ddev_restart() {
 status_complete() {
     log_header 'Processwire installation completed!'
     log_info "The ProcessWire project has been set up successfully and is ready to use."
-    log_info "To enable workflow deployment, remember to update the .env file and then run 'ddev cpw-deploy'."
+    log_info "To enable workflow deployment, remember to update the .env file and then run 'ddev dw-deploy'."
     echo
 }
 

@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+#ddev-generated
+## Description: Installs ProcessWire and automates publishing your site to production, staging, or dev with GitHub Actions
+## Usage: dewire [ENV]
+
+set -euo pipefail
+trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
+
+# Source common logging/colors and helpers
+source "$(dirname "$0")/lib/common.sh"
+
+if [[ "${1:-}" == "--help" ]]; then
+    echo "dewire: Installs ProcessWire and sets up GitHub deployment workflows in one step."
+    echo "Usage: ddev dewire [--lazy] [--silent]"
+    exit 0
+fi
+
+main() {
+    # Parse script arguments
+    parse_script_args "$@"
+    
+    log_header "Welcome to DeWire!"
+    log_info "This will install ProcessWire and set up GitHub deployment workflows."
+    log_info "Ensure requirements are met and .env is filled out; or don’t, we’ll verify it for you."
+    
+    validate_and_load_env "${PARSED_ARGS[0]:-}" ""
+    
+    log_step "Step 1: Installing ProcessWire"
+    if [ "$SILENT_FLAG" = "--silent" ]; then
+        ddev dw-install --silent && log_success "ProcessWire installation complete." || { log_fatal "ProcessWire installation failed!"; exit 1; }
+    else
+        ddev dw-install && log_success "ProcessWire installation complete." || { log_fatal "ProcessWire installation failed!"; exit 1; }
+    fi
+    
+    log_step "Step 2: Setting up GitHub deployment workflows (lazy mode)"
+    if [ "$SILENT_FLAG" = "--silent" ]; then
+        ddev dw-deploy "$ENV" --lazy --silent && log_success "GitHub deployment setup complete." || { log_fatal "GitHub deployment setup failed!"; exit 1; }
+    else
+        ddev dw-deploy "$ENV" --lazy && log_success "GitHub deployment setup complete." || { log_fatal "GitHub deployment setup failed!"; exit 1; }
+    fi
+    
+    log_success "All steps completed! Your project is ready for automated deployments."
+}
+
+main "$@"

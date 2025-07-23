@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #ddev-generated
 ## Description: Generate personal and project SSH keys if they do not exist
-## Usage: cpw-sshkeys-gen
+## Usage: dw-sshkeys-gen
 
 set -eu
 trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
@@ -10,8 +10,8 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
-    echo "cpw-sshkeys-gen: Generate personal and project SSH keys if they do not exist."
-    echo "Usage: ddev cpw-sshkeys-gen"
+    echo "dw-sshkeys-gen: Generate personal and project SSH keys if they do not exist."
+    echo "Usage: ddev dw-sshkeys-gen"
     exit 0
 fi
 

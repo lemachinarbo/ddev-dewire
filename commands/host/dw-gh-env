@@ -1,0 +1,426 @@
+#!/usr/bin/env bash
+#ddev-generated
+## Description: Automates setup of GitHub Actions repository variables and secrets for deployment using GitHub CLI (gh), with multi-environment support
+## Usage: dw-gh-env [ENV]
+
+set -euo pipefail
+trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
+
+# Source common logging/colors and helpers
+source "$(dirname "$0")/lib/common.sh"
+
+if [[ "${1:-}" == "--help" ]]; then
+    echo "dw-gh-env: Automates setup of GitHub Actions repository variables and secrets for deployment."
+    echo "Usage: ddev dw-gh-env [ENV] [--silent] [--debug]"
+    exit 0
+fi
+
+main() {
+    # Export NO_COLOR globally to ensure all gh commands use plain output
+    export NO_COLOR=1
+    
+    # Parse script arguments including debug flag
+    parse_script_args "$@"
+    
+    validate_and_load_env "${PARSED_ARGS[0]:-}" "$SILENT_FLAG"
+    check_gh_cli
+    check_gh_auth
+    check_repo_access
+    setup_known_hosts
+    summary
+    upload_github_secrets_and_vars
+}
+
+check_gh_cli() {
+    if ! command -v gh >/dev/null 2>&1; then
+        log_error "GitHub CLI (gh) is not installed or not in your PATH. Please install it and rerun this script.\nIf gh is not installed, visit https://github.com/cli/cli#installation for installation instructions."
+        exit 1
+    fi
+}
+
+check_gh_auth() {
+    if ! gh auth status >/dev/null 2>&1; then
+        log_error "GitHub CLI (gh) is not authenticated. Please run 'gh auth login' to authenticate, and ensure you have access to the repository."
+        exit 1
+    fi
+}
+
+check_repo_access() {
+    if ! gh repo view "$REPO_FULL" >/dev/null 2>&1; then
+        log_error "Cannot access GitHub repository $REPO_FULL. Please check the repository name and your permissions."
+        exit 1
+    fi
+}
+
+setup_known_hosts() {
+    # Get SSH_HOST from environment-specific variable
+    local ssh_host_var="${ENV}_SSH_HOST"
+    SSH_HOST="${!ssh_host_var:-}"
+    
+    if [ -z "$SSH_HOST" ]; then
+        log_ask "Required value SSH_HOST (your SSH host) missing from .env. Enter your SSH_HOST (e.g. example.com): "
+        read -r SSH_HOST
+    fi
+    if [ -z "$SSH_HOST" ]; then
+        log_error "Required value SSH_HOST (your SSH host) missing from .env. Aborting."
+        exit 1
+    fi
+    KNOWN_HOSTS=$(ssh-keyscan "$SSH_HOST" 2>/dev/null)
+    if [ -z "$KNOWN_HOSTS" ]; then
+        log_error "Could not generate KNOWN_HOSTS for $SSH_HOST. Aborting."
+        exit 1
+    fi
+}
+
+summary() {
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_info "\nSummary of schema-driven upload:"
+        log_info "- Repository variables: ${#REQUIRED_VARS[@]} required + ${#OPTIONAL_VARS[@]} optional"
+        log_info "- Repository secrets: ${#REPO_SECRET_VARS[@]} variables"
+        log_info "- LOCAL environment: ${#LOCAL_REQUIRED_VARS[@]} required + ${#LOCAL_OPTIONAL_VARS[@]} optional variables"
+        log_info "- LOCAL secrets: ${#LOCAL_SECRET_VARS[@]} secret variables"
+        log_info "- $ENV environment: ${#ENV_REQUIRED_VARS[@]} required + ${#ENV_OPTIONAL_VARS[@]} optional variables"
+        log_info "- $ENV secrets: ${#ENV_SECRET_VARS[@]} secret variables"
+        log_info "- SSH_KEY: $SSH_KEY_PATH"
+        log_info "- KNOWN_HOSTS: (generated for $SSH_HOST)"
+    fi
+}
+
+upload_github_secrets_and_vars() {
+    ERRORS=0
+    LOCAL_ENV="LOCAL"  # Define LOCAL environment name as variable for easy changes
+    
+    # Global tracking arrays for summary
+    declare -A UPLOADED_VARIABLES
+    declare -A UPLOADED_SECRETS
+    declare -A SKIPPED_VARIABLES
+    
+    # Helper function to track variable status for debug summary
+    track_variable() {
+        local var="$1"
+        local scope="$2"
+        local status="$3"  # "uploaded", "unchanged", "empty"
+        
+        local key="$var ($scope)"
+        if [ "$status" = "uploaded" ]; then
+            UPLOADED_VARIABLES["$key"]="uploaded"
+        else
+            SKIPPED_VARIABLES["$key"]="$status"
+        fi
+    }
+    
+    # Helper function to track secret status for debug summary
+    track_secret() {
+        local var="$1"
+        local scope="$2"
+        local status="$3"  # "uploaded"
+        
+        UPLOADED_SECRETS["$var ($scope)"]="$status"
+    }
+    
+    # Helper function to print debug summary table
+    print_debug_table() {
+        local title="$1"
+        local -n items_ref=$2  # Reference to associative array
+        
+        echo
+        log_info "$title:"
+        printf "%-28s %s\n" "${title%s}" "Status"  # Remove trailing 's' for header
+        printf "%-28s %s\n" "$(printf '%.0s─' {1..28})" "$(printf '%.0s─' {1..28})"
+        
+        for item in "${!items_ref[@]}"; do
+            local status="${items_ref[$item]}"
+            case "$status" in
+                "uploaded") printf "%-28s %s\n" "$item" "${SYM_OK} uploaded" ;;
+                "unchanged") printf "%-28s %s\n" "$item" "${SYM_NOT_SET} unchanged" ;;
+                "empty") printf "%-28s %s\n" "$item" "${SYM_WARNING} empty" ;;
+            esac
+        done
+    }
+    
+    # Helper function to download all current variables for an environment/repo
+    download_current_variables() {
+        local scope="$1"  # "repo" or environment name
+        local output
+        
+        if [ "$scope" = "repo" ]; then
+            output=$(gh variable list --repo "$REPO_FULL" --json name,value 2>/dev/null || echo "[]")
+        else
+            output=$(gh variable list --env "$scope" --repo "$REPO_FULL" --json name,value 2>/dev/null || echo "[]")
+        fi
+        echo "$output"
+    }
+    
+    # Helper function to batch upload variables with summary
+    batch_upload_variables() {
+        local scope="$1"        # "repo" or environment name  
+        local vars_array_name="$2"  # Name of array containing variables to upload
+        local description="$3"   # Description for logging
+        
+        # Get reference to the array
+        local -n vars_array=$vars_array_name
+        
+        # Download current variables
+        local current_vars
+        current_vars=$(download_current_variables "$scope")
+        
+        # Build associative array of current values
+        declare -A current_values
+        if command -v jq >/dev/null 2>&1; then
+            while IFS='=' read -r name value; do
+                [[ -n "$name" ]] && current_values["$name"]="$value"
+            done < <(echo "$current_vars" | jq -r '.[] | "\(.name)=\(.value)"' 2>/dev/null || true)
+        else
+            log_error "jq is required but not installed"
+            ERRORS=$((ERRORS + 1))
+            return 1
+        fi
+        
+        local changed=0
+        local skipped=0
+        local empty=0
+        local changed_vars=()
+        local upload_results=()
+        
+        # Process each variable
+        for var in "${vars_array[@]}"; do
+            local value=""
+            # Safely get environment variable value
+            if [ "$scope" = "repo" ]; then
+                value=$(get_env_var "" "$var" "$ENV_FILE" 2>/dev/null || echo "")
+            elif [ "$scope" = "$LOCAL_ENV" ]; then
+                value=$(get_env_var "" "$var" "$ENV_FILE" 2>/dev/null || echo "")
+            else
+                # Environment-specific variable
+                local env_var="${scope}_${var}"
+                value=$(get_env_var "" "$env_var" "$ENV_FILE" 2>/dev/null || echo "")
+            fi
+            
+            if [ -n "$value" ]; then
+                local current_value="${current_values[$var]:-}"
+                
+                if [ "$current_value" = "$value" ]; then
+                    skipped=$((skipped + 1))
+                    upload_results+=("$var:unchanged")
+                    track_variable "$var" "$scope" "unchanged"
+                else
+                    local upload_cmd
+                    if [ "$scope" = "repo" ]; then
+                        upload_cmd="gh variable set '$var' --body '$value' --repo '$REPO_FULL'"
+                    else
+                        upload_cmd="gh variable set '$var' --env '$scope' --body '$value' --repo '$REPO_FULL'"
+                    fi
+                    
+                    if eval "$upload_cmd" >/dev/null 2>&1; then
+                        changed=$((changed + 1))
+                        changed_vars+=("$var")
+                        upload_results+=("$var:updated")
+                        track_variable "$var" "$scope" "uploaded"
+                    else
+                        log_error "Failed to set $scope variable $var"
+                        upload_results+=("$var:failed")
+                        ERRORS=$((ERRORS + 1))
+                    fi
+                fi
+            else
+                empty=$((empty + 1))
+                upload_results+=("$var:empty")
+                track_variable "$var" "$scope" "empty"
+            fi
+        done
+        
+        # Print summary - only show if something interesting happened
+        local summary_parts=()
+        [ $changed -gt 0 ] && summary_parts+=("$changed variables uploaded")
+        [ $skipped -gt 0 ] && summary_parts+=("$skipped unchanged")
+        [ $empty -gt 0 ] && summary_parts+=("$empty empty")
+        
+        if [ ${#summary_parts[@]} -gt 0 ]; then
+            local summary=$(IFS=', '; echo "${summary_parts[*]}")
+            if [ $changed -gt 0 ]; then
+                log_ok "$summary variables"
+            elif [ $skipped -gt 0 ] || [ $empty -gt 0 ]; then
+                # Use symbol for unchanged/empty without logging individual items
+                if [ $skipped -gt 0 ] && [ $empty -gt 0 ]; then
+                    log_info "${SYM_NOT_SET} $skipped unchanged, $empty empty variables"
+                elif [ $skipped -gt 0 ]; then
+                    log_info "${SYM_NOT_SET} $skipped unchanged variables"
+                elif [ $empty -gt 0 ]; then
+                    log_info "${SYM_WARNING} $empty empty variables"
+                fi
+            fi
+        fi
+    }
+    
+    # Helper function to upload secret (repo or environment)
+    upload_secret() {
+        local var="$1"
+        local value="$2"
+        local env="${3:-repo}"  # Default to repo if no env specified
+        
+        local cmd
+        local scope_label
+        if [ "$env" = "repo" ]; then
+            cmd="gh secret set '$var' --body '$value' --repo '$REPO_FULL'"
+            scope_label="repository"
+        else
+            cmd="gh secret set '$var' --env '$env' --body '$value' --repo '$REPO_FULL'"
+            scope_label="$env"
+        fi
+        
+        if eval "$cmd" >/dev/null 2>&1; then
+            track_secret "$var" "$env" "uploaded"
+            return 0
+        else
+            log_error "Failed to set $scope_label secret $var"
+            ERRORS=$((ERRORS + 1))
+            return 1
+        fi
+    }
+    
+    log_info "\nUploading repository variables to GitHub..."
+    
+    # Create array for repository variables
+    repo_vars=("${REQUIRED_VARS[@]}" "${OPTIONAL_VARS[@]}")
+    if [ ${#repo_vars[@]} -gt 0 ]; then
+        batch_upload_variables "repo" repo_vars "repository variables"
+    fi
+    
+    # Upload repository-level secrets (marked with @) - always overwrite
+    local secret_count=0
+    for var in "${REPO_SECRET_VARS[@]}"; do
+        local value=$(get_env_var "" "$var" "$ENV_FILE")
+        if [ -n "$value" ]; then
+            upload_secret "$var" "$value" "repo" && secret_count=$((secret_count + 1))
+        fi
+    done
+    [ $secret_count -gt 0 ] && log_ok "$secret_count secret uploaded" || [ $secret_count -eq 0 ] && [ "$DEBUG_MODE" = "true" ] && log_info "${SYM_NOT_SET} No repository secrets to upload"
+    
+    # Ensure GitHub environments exist
+    create_environment() {
+        local env_name="$1"
+        local api_url="/repos/$REPO_OWNER/$REPO_NAME/environments/$env_name"
+        
+        if gh api --method PUT -H "Accept: application/vnd.github+json" "$api_url" >/dev/null 2>&1; then
+            [ "$DEBUG_MODE" = "true" ] && log_ok "Environment '$env_name' ensured on GitHub."
+            return 0
+        else
+            log_error "Failed to create or access environment '$env_name' on GitHub."
+            return 1
+        fi
+    }
+    
+    # Create environments
+    create_environment "$LOCAL_ENV" || ERRORS=$((ERRORS + 1))
+    create_environment "$ENV" || ERRORS=$((ERRORS + 1))
+    
+    log_info "\nUploading LOCAL environment variables to GitHub environment '$LOCAL_ENV'..."
+    
+    # Upload LOCAL environment variables (marked with +) using batch processing
+    if [ ${#LOCAL_REQUIRED_VARS[@]} -gt 0 ] || [ ${#LOCAL_OPTIONAL_VARS[@]} -gt 0 ]; then
+        local_vars=("${LOCAL_REQUIRED_VARS[@]}" "${LOCAL_OPTIONAL_VARS[@]}")
+        batch_upload_variables "$LOCAL_ENV" local_vars "LOCAL variables"
+    else
+        log_info "No LOCAL variables to upload"
+    fi
+    
+    # Upload LOCAL environment secrets (marked with +@) - always overwrite
+    local local_secret_count=0
+    for var in "${LOCAL_SECRET_VARS[@]}"; do
+        local value=$(get_env_var "" "$var" "$ENV_FILE")
+        if [ -n "$value" ]; then
+            upload_secret "$var" "$value" "$LOCAL_ENV" && local_secret_count=$((local_secret_count + 1))
+        fi
+    done
+    [ $local_secret_count -gt 0 ] && log_ok "$local_secret_count secrets uploaded"
+    
+    log_info "\nUploading $ENV environment variables to GitHub environment '$ENV'..."
+    
+    # Upload environment-specific variables using batch processing
+    env_vars=("${ENV_REQUIRED_VARS[@]}" "${ENV_OPTIONAL_VARS[@]}")
+    if [ ${#env_vars[@]} -gt 0 ]; then
+        batch_upload_variables "$ENV" env_vars "$ENV variables"
+    fi
+    
+    # Upload environment-specific secrets - always overwrite
+    local env_secret_count=0
+    for var in "${ENV_SECRET_VARS[@]}"; do
+        local env_var="${ENV}_${var}"
+        local value=$(get_env_var "" "$env_var" "$ENV_FILE")
+        if [ -n "$value" ]; then
+            upload_secret "$var" "$value" "$ENV" && env_secret_count=$((env_secret_count + 1))
+        fi
+    done
+    
+    # Add SSH key handling (special case)
+    if [ -f "$SSH_KEY_PATH" ]; then
+        SSH_KEY_CONTENT=$(cat "$SSH_KEY_PATH")
+        upload_secret "SSH_KEY" "$SSH_KEY_CONTENT" "$ENV" && env_secret_count=$((env_secret_count + 1))
+    fi
+    
+    [ $env_secret_count -gt 0 ] && log_ok "$env_secret_count secrets uploaded"
+    
+    # Add KNOWN_HOSTS (special case variable)
+    if [ -n "$KNOWN_HOSTS" ]; then
+        # Handle KNOWN_HOSTS upload
+        upload_known_hosts() {
+            local current_vars
+            current_vars=$(download_current_variables "$ENV")
+            
+            declare -A current_values
+            if command -v jq >/dev/null 2>&1; then
+                while IFS='=' read -r name value; do
+                    [[ -n "$name" ]] && current_values["$name"]="$value"
+                done < <(echo "$current_vars" | jq -r '.[] | "\(.name)=\(.value)"' 2>/dev/null || true)
+            fi
+            
+            local current_value="${current_values[KNOWN_HOSTS]:-}"
+            if [ "$current_value" = "$KNOWN_HOSTS" ]; then
+                [ "$DEBUG_MODE" = "true" ] && log_info "${SYM_NOT_SET} KNOWN_HOSTS unchanged"
+                track_variable "KNOWN_HOSTS" "$ENV" "unchanged"
+            else
+                if gh variable set "KNOWN_HOSTS" --env "$ENV" --body "$KNOWN_HOSTS" --repo "$REPO_FULL" >/dev/null 2>&1; then
+                    log_ok "KNOWN_HOSTS updated"
+                    track_variable "KNOWN_HOSTS" "$ENV" "uploaded"
+                else
+                    log_error "Failed to set KNOWN_HOSTS"
+                    ERRORS=$((ERRORS + 1))
+                fi
+            fi
+        }
+        upload_known_hosts
+    fi
+    
+    if [ $ERRORS -eq 0 ]; then
+        # log_ok "Environment variables and secrets upload complete."
+        
+        # Show debug summary table
+        if [ "$DEBUG_MODE" = "true" ]; then
+            echo
+            log_info "Upload Summary:"
+            
+            # Variables summary
+            if [ ${#UPLOADED_VARIABLES[@]} -gt 0 ] || [ ${#SKIPPED_VARIABLES[@]} -gt 0 ]; then
+                # Combine uploaded and skipped variables for unified display
+                declare -A all_variables
+                for var in "${!UPLOADED_VARIABLES[@]}"; do
+                    all_variables["$var"]="uploaded"
+                done
+                for var in "${!SKIPPED_VARIABLES[@]}"; do
+                    all_variables["$var"]="${SKIPPED_VARIABLES[$var]}"
+                done
+                print_debug_table "Variables" all_variables
+            fi
+            
+            # Secrets summary  
+            if [ ${#UPLOADED_SECRETS[@]} -gt 0 ]; then
+                print_debug_table "Secrets" UPLOADED_SECRETS
+            fi
+        fi
+    else
+        log_error "Environment variables and secrets upload completed with $ERRORS error(s)."
+        exit 1
+    fi
+}
+
+main "$@"

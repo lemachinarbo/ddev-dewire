@@ -22,7 +22,7 @@ jobs:
       # Example: GET_PHP_COMMAND: "/user/bin/php8.1-cli"
       GET_PHP_COMMAND: ${{ vars.GET_PHP_COMMAND || 'php' }}
       PW_ROOT: ${{ vars.PW_ROOT || 'public' }}
-      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      DEPLOY_PATH: ${{ vars.PATH }}
     steps:
       - name: Checkout
         if: ${{ !env.SUBMODULES }}
@@ -66,18 +66,18 @@ jobs:
         run: |
           install -m 600 -D /dev/null ~/.ssh/id_rsa
           echo "${{ secrets.SSH_KEY }}" > ~/.ssh/id_rsa
-          echo "${{ secrets.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          echo "${{ vars.KNOWN_HOSTS }}" > ~/.ssh/known_hosts
 
       - name: 🚚 Deploy via RSYNC and Set Permissions
         run: |
           ssh ${{ vars.SSH_USER }}@${{ vars.SSH_HOST }} -p22 "mkdir -p ${{ env.DEPLOY_FOLDER }}"
-          rsync -avz --exclude '.git' --chmod=D755,F644 ${{ env.SRC }}/${{ env.PW_ROOT }}/ ${{ vars.SSH_USER }}@${{ vars.SSH_HOST }}:${{ env.DEPLOY_FOLDER }}
+          rsync -avz --exclude '.git' --chmod=D755,F644 ${{ env.SRC }}/ ${{ vars.SSH_USER }}@${{ vars.SSH_HOST }}:${{ env.DEPLOY_FOLDER }}
 
       - name: 🐘 Get PHP Command
         id: get-php
         run: |
           if [ -z "${{ env.PHP_COMMAND }}" ]; then
-            PHP_COMMAND=$(ssh ${{ vars.SSH_USER }}@${{ vars.SSH_HOST }} -p22 "${{ env.GET_PHP_COMMAND }} ${{ env.DEPLOY_FOLDER }}/site/modules/RockMigrations/get-php.php")
+            PHP_COMMAND=$(ssh ${{ vars.SSH_USER }}@${{ vars.SSH_HOST }} -p22 "${{ env.GET_PHP_COMMAND }} ${{ env.DEPLOY_FOLDER }}/${{ env.PW_ROOT }}/site/modules/RockMigrations/get-php.php")
           else
             PHP_COMMAND="${{ env.PHP_COMMAND }}"
           fi
@@ -86,4 +86,4 @@ jobs:
 
       - name: 🌟 Trigger RockMigrations Deployment
         run: |
-          ssh ${{ vars.SSH_USER }}@${{ vars.SSH_HOST }} -p22 "$PHP_COMMAND ${{ env.DEPLOY_FOLDER }}/site/modules/RockMigrations/deploy.php ${{ env.BRANCH }}"
+          ssh ${{ vars.SSH_USER }}@${{ vars.SSH_HOST }} -p22 "PW_ROOT=${{ env.PW_ROOT }} $PHP_COMMAND ${{ env.DEPLOY_FOLDER }}/${{ env.PW_ROOT }}/site/modules/RockMigrations/deploy.php ${{ env.BRANCH }}"

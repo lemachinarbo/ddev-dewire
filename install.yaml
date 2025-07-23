@@ -1,18 +1,23 @@
-name: compwser
+name: dewire
 
 project_files:
   - docker-compose.compwser.yaml
   - commands/host/lib/common.sh
-  - commands/host/compwser
-  - commands/host/cpw-config-split
-  - commands/host/cpw-gh-env
-  - commands/host/cpw-gh-workflow
-  - commands/host/cpw-deploy
-  - commands/host/cpw-install
+  - commands/host/lib/env-loader.sh
+  - commands/host/lib/.env.schema
+  - commands/host/dewire
+  - commands/host/dw-config-split
+  - commands/host/dw-db-import
+  - commands/host/dw-gh-env
+  - commands/host/dw-gh-workflow
+  - commands/host/dw-deploy
+  - commands/host/dw-git-remote
+  - commands/host/dw-install
   - commands/web/rs
-  - commands/host/cpw-sshkeys-gen
-  - commands/host/cpw-sshkeys-install
-  - commands/host/cpw-sync
-  - compwser/
+  - commands/host/dw-sshkeys-gen
+  - commands/host/dw-sshkeys-install
+  - commands/host/dw-sync
+  - commands/host/dw-transform
+  - dewire/
 
 ddev_version_constraint: '>= v1.24.3'

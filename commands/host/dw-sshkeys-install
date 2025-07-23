@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #ddev-generated
 ## Description: Register personal and project SSH keys on a remote server and test authentication
-## Usage: cpw-sshkeys-install [ENV]
+## Usage: dw-sshkeys-install [ENV]
 
 set -eu
 trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
@@ -10,19 +10,21 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
-    echo "cpw-sshkeys-install: Register personal and project SSH keys on a remote server and test authentication."
-    echo "Usage: ddev cpw-sshkeys-install [ENV]"
+    echo "dw-sshkeys-install: Register personal and project SSH keys on a remote server and test authentication."
+    echo "Usage: ddev dw-sshkeys-install [ENV]"
     exit 0
 fi
 
 SSH_DIR="$HOME/.ssh"
 PERSONAL_KEY="$SSH_DIR/id_ed25519"
-PROJECT_KEY="$SSH_DIR/id_github"
 
 main() {
-    check_env_file_exists
-    resolve_and_load_env_vars "$@"
-    local KEYS=("$PERSONAL_KEY" "$PROJECT_KEY")
+    # Parse script arguments  
+    parse_silent_flag "$@"
+    
+    validate_and_load_env "${SILENT_ARGS[0]:-}" "$SILENT_FLAG"
+    
+    local KEYS=("$PERSONAL_KEY" "$SSH_KEY_PATH")
     local LABELS=("Personal" "Project")
     echo
     log_info "Installing ssh keys ..."
@@ -33,20 +35,6 @@ main() {
     for i in "${!KEYS[@]}"; do
         test_key_auth "${LABELS[$i]}" "${KEYS[$i]}"
     done
-}
-
-resolve_and_load_env_vars() {
-    ENVIRONMENTS=$(get_env_environments)
-    if [ -z "$ENVIRONMENTS" ]; then
-        log_error "No ENVIRONMENTS variable found in $ENV_FILE"
-        exit 1
-    fi
-    resolve_environment "${1:-}" "$ENVIRONMENTS"
-    ENV="$SELECTED_ENV"
-    PREFIX="${ENV}_"
-    SSH_USER="$(get_env_var "$PREFIX" SSH_USER "$ENV_FILE")"
-    SSH_HOST="$(get_env_var "$PREFIX" SSH_HOST "$ENV_FILE")"
-    SERVER="$SSH_USER@$SSH_HOST"
 }
 
 is_key_installed() {

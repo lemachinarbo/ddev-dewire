@@ -1,0 +1,257 @@
+#!/usr/bin/env bash
+#ddev-generated
+## Description: Automate all setup and deployment steps for publishing your site to any environment
+## Usage: dw-deploy [ENV]
+
+set -euo pipefail
+trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
+
+# Source common logging/colors and helpers
+source "$(dirname "$0")/lib/common.sh"
+
+if [[ "${1:-}" == "--help" ]]; then
+    echo "dw-deploy: Orchestrates all setup and deployment steps for DeWire."
+    echo "Usage: ddev dw-deploy [ENV] [--lazy]"
+    exit 0
+fi
+
+main() {
+    # Parse script arguments
+    parse_script_args "$@"
+    
+    log_header "Welcome to the DeWire Environment Setup tool"
+    log_info "This script will guide you through setting up your environment for automated deployments."
+    
+    # First check basic requirements (tools, files, etc)
+    check_basic_requirements
+    
+    # Then validate and load environment (this will ask for environment selection)
+    validate_and_load_env "${PARSED_ARGS[0]:-}" ""
+    
+    # Finally check environment-specific requirements (SSH keys, etc)
+    check_env_requirements
+    
+    setup_ssh_keys
+    check_git_remote_and_branch
+    setup_github_actions
+    setup_github_workflows
+    setup_config_files
+    sync_files
+    import_database
+    run_transform
+    echo
+    log_success "All selected steps completed!"
+    log_info "Reminder: Commit and push your changes to the repository to test the deployment workflows."
+}
+
+check_basic_requirements() {
+    echo
+    log_info "Checking basic requirements:"
+    REQUIREMENTS_OK=true
+    check_bash_version
+    check_github_cli
+    if [ "$REQUIREMENTS_OK" = false ]; then
+        log_fatal "Some basic requirements are missing. Please fix them and rerun the script."
+        exit 1
+    fi
+    log_success "Basic requirements met."
+}
+
+check_env_requirements() {
+    echo
+    log_info "Checking environment requirements:"
+    REQUIREMENTS_OK=true
+    check_github_repo
+    check_ssh_keys
+    check_generate_ssh_keys_if_missing
+    if [ "$REQUIREMENTS_OK" = false ]; then
+        log_fatal "Some environment requirements are missing or invalid. Please fix them and rerun the script."
+        exit 1
+    fi
+    log_success "All requirements met. Let's start environment setup."
+}
+
+check_git_remote_and_branch() {
+    log_header "Git Repository Initialization"
+    log_info "Setting git remote and initializing repository if needed."
+    ask_user "Initialize remote repository? [Y/n]: "
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        ddev dw-git-remote "$ENV" --silent && log_success "Git remote initialization complete." || { log_error "Git remote initialization failed!"; exit 1; }
+    else
+        log_warn "Skipped git remote setup and repository initialization. You may encounter authentication issues or workflow errors until the remote is initialized."
+    fi
+}
+
+setup_ssh_keys() {
+    log_header "Installing SSH Keys"
+    log_info "Allows automated deployments with passwordless SSH access."
+    ask_user "Install keys now? [Y/n]: "
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        ddev dw-sshkeys-install "$ENV" --silent && log_success "SSH key installation and authentication test complete." || { log_error "SSH key installation failed!"; exit 1; }
+    else
+        log_warn "Skipping SSH key installation."
+    fi
+}
+
+setup_github_actions() {
+    log_header "GitHub Actions Setup"
+    log_info "Automated deployment requires secrets and variables set in the GitHub $ENV environment"
+    ask_user "Run GitHub Actions setup? [Y/n]: "
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        ddev dw-gh-env "$ENV" --silent && log_success "All GitHub Actions variables and secrets have been processed successfully." || { log_error "GitHub setup failed!"; exit 1; }
+    else
+        log_warn "Skipping GitHub Actions setup."
+    fi
+}
+
+setup_github_workflows() {
+    log_header "GitHub Workflows Setup"
+    log_info "To trigger automated deployments, link a branch to the $ENV environment in GitHub."
+    ask_user "Select branch now? [Y/n]: "
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        ddev dw-gh-workflow "$ENV" --silent && log_success "GitHub Actions workflow files generated successfully." || { log_error "Workflow file generation failed!"; exit 1; }
+    else
+        log_warn "Skipping GitHub Actions workflow file generation."
+    fi
+}
+
+setup_config_files() {
+    log_header "Config File Setup"
+    log_info "To separate local and production settings, your config.php will be split, creating a config-local.php for environment-specific overrides."
+    ask_user "Create config-local.php? [Y/n]: "
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        ddev dw-config-split "$ENV" --silent && log_success "config-local setup complete." || { log_error "config-local.php setup failed!"; exit 1; }
+    else
+        log_warn "Skipping config-local.php setup."
+    fi
+}
+
+sync_files() {
+    log_header "File Sync"
+    log_info "To deploy your site, all project files need to be uploaded and synced to the $ENV server."
+    ask_user "Sync files and deploy to server? [Y/n]: "
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        ddev dw-sync "$ENV" --silent && log_ok "File sync complete." || { log_error "File sync failed!"; exit 1; }
+    else
+        log_warn "Skipping file sync."
+    fi
+}
+
+import_database() {
+    log_header "Database Import"
+    log_info "Import local database to $ENV server to run the site."
+    ask_user "Import now? [Y/n]: "
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        ddev dw-db-import "$ENV" --silent && log_ok "Database import completed successfully." || { log_error "Database import failed!"; exit 1; }
+    else
+        log_warn "Skipping database import."
+    fi
+}
+
+run_transform() {
+    log_header "Environment Folder Structure"
+    log_info "A new folder structure is required on the $ENV server for multi-version deployments."
+    if [[ "$LAZY_MODE" = true ]]; then
+        ddev dw-transform "$ENV" --lazy --silent && log_ok "Server file structure updated and permissions set: directories=755, files=644." || { log_error "Folder structure update failed!"; exit 1; }
+    else
+        ask_user "Update folder structure? [Y/n]: "
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            ddev dw-transform "$ENV" --silent && log_ok "Server file structure updated and permissions set: directories=755, files=644." || { log_error "Folder structure update failed!"; exit 1; }
+        else
+            log_warn "Skipping server file structure update and permissions fix."
+        fi
+    fi
+}
+
+check_env_placeholders() {
+    local env_file="$ENV_FILE"
+    local placeholders=(
+        "your-github-username-or-org"
+        "your-repo-name"
+        "your-github-personal-access-token"
+        "your-ssh-host"
+        "your-ssh-user"
+        "yourdomain.com"
+    )
+    for value in "${placeholders[@]}"; do
+        # Only check non-commented lines for placeholders
+        if grep -v '^#' "$env_file" | grep -q "$value"; then
+            log_fatal ".env file contains default template value '$value'. Please update .env with your actual project/server info before continuing."
+            exit 1
+        fi
+    done
+}
+
+check_github_cli() {
+    if command -v gh >/dev/null 2>&1; then
+        log_ok "GitHub CLI (gh) is installed."
+        HAS_GH=true
+    else
+        log_error "GitHub CLI (gh) is not installed."
+        HAS_GH=false
+        REQUIREMENTS_OK=false
+    fi
+}
+
+check_github_repo() {
+    if [ "$HAS_GH" = true ]; then
+        if ! gh repo view "$REPO_FULL" >/dev/null 2>&1; then
+            log_fatal "Repository $REPO_FULL not found or you do not have access. Please check your .env file, repo visibility, and GitHub permissions."
+            REQUIREMENTS_OK=false
+        else
+            log_ok "Repository $REPO_FULL found and accessible."
+        fi
+    fi
+}
+
+check_ssh_keys() {
+    # if [ -f "$HOME/.ssh/id_ed25519" ]; then
+    #     log_ok "Personal SSH key (id_ed25519) found."
+    #     HAS_PERSONAL_KEY=true
+    # else
+    #     log_error "Personal SSH key (id_ed25519) not found."
+    #     HAS_PERSONAL_KEY=false
+    #     REQUIREMENTS_OK=false
+    # fi
+
+    if [ -f "$SSH_KEY_PATH" ]; then
+        log_ok "Project SSH key ($SSH_KEY_NAME) found."
+        HAS_PROJECT_KEY=true
+    else
+        log_error "Project SSH key ($SSH_KEY_NAME) not found."
+        HAS_PROJECT_KEY=false
+        REQUIREMENTS_OK=false
+    fi
+}
+
+check_generate_ssh_keys_if_missing() {
+    if [ ! -f "$HOME/.ssh/id_ed25519" ] || [ ! -f "$SSH_KEY_PATH" ]; then
+        log_warn "One or both SSH keys are missing."
+        log_info "SSH keys are required for secure and passwordless access for automated deployments."
+        log_ask "Generate the missing SSH keys now? [Y/n]: "
+        read gen_keys
+        gen_keys=${gen_keys:-y}
+        if [[ $gen_keys =~ ^[Yy]$ ]]; then
+            ddev dw-sshkeys-gen || { log_fatal "SSH key generation failed!"; exit 1; }
+        fi
+        # Re-check for keys after generation
+        if [ -f "$HOME/.ssh/id_ed25519" ] && [ -f "$SSH_KEY_PATH" ]; then
+            log_ok "SSH keys generated and found."
+            REQUIREMENTS_OK=true
+        else
+            log_fatal "SSH key generation failed or keys still missing. Aborting."
+            exit 1
+        fi
+    fi
+}
+
+check_bash_version() {
+    local bash_version="${BASH_VERSION%%.*}"
+    if (( bash_version >= 4 )); then
+        log_ok "Bash $BASH_VERSION found (bash 4+ detected)."
+    else
+        log_warn "Bash $BASH_VERSION found (bash $bash_version detected) - running in compatibility mode, let's cross fingers! 🤞"
+    fi
+}
+
+main "$@"

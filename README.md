@@ -1,134 +1,94 @@
 [![add-on registry](https://img.shields.io/badge/DDEV-Add--on_Registry-blue)](https://addons.ddev.com)
-[![tests](https://github.com/lemachinarbo/ddev-comPWser/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/lemachinarbo/ddev-comPWser/actions/workflows/tests.yml?query=branch%3Amain)
-[![last commit](https://img.shields.io/github/last-commit/lemachinarbo/ddev-comPWser)](https://github.com/lemachinarbo/ddev-comPWser/commits)
-[![release](https://img.shields.io/github/v/release/lemachinarbo/ddev-comPWser)](https://github.com/lemachinarbo/ddev-comPWser/releases/latest)
+[![tests](https://github.com/lemachinarbo/ddev-dewire/actions/workflows/tests.yml/badge.svg?branch=main)](https://github.com/lemachinarbo/ddev-dewire/actions/workflows/tests.yml?query=branch%3Amain)
+[![last commit](https://img.shields.io/github/last-commit/lemachinarbo/ddev-DeWire)](https://github.com/lemachinarbo/ddev-dewire/commits)
+[![release](https://img.shields.io/github/v/release/lemachinarbo/ddev-dewire)](https://github.com/lemachinarbo/ddev-dewire/releases/latest)
 
-# DDEV comPWser
+# DDEV DeWire
+*Simplify ProcessWire deployments with a single DDEV command: **De**fine once, **De**ploy everywhere.*
 
-A one-ddev-command setup to install [ProcessWire](https://github.com/processwire/processwire) and wire up GitHub deploys to staging, prod, testing, or dev.
+DeWire installs [ProcessWire](https://github.com/processwire/processwire) and automates GitHub as your deployment control center — manage dev, staging, and prod from a single source of truth.
 
-With comPWser you can do 3 things:
-1. [Download and Install Processwire](#1-just-install-processwire) with one command.
-2. Install Processwire and [deploy your site](#2-set-up-deployment) to production (or staging, testing, etc.), with… one command.
-3. [The all-together](#3-install-and-deploy-in-one-command): steps 1 and 2 with minimal prompts in one command.
-4. Nop, just 3.
+With DeWire you can do 3 things:
+
+1. [Download and install ProcessWire](#1-installing-processwire) with one command.
+2. Install ProcessWire *and* [deploy your site](#2-set-up-deployment) (prod, staging, etc.) step by step — one command.
+3. [Do both at once](#3-install-and-deploy-in-one-command) in auto mode with minimal prompts… yep, one command.
+4. Nope, just 3.
 
 ## Why?
 
-Because downloading, installing ProcessWire, adding the modules, setting up the repository, adding the actions, the secrets, the workflow… takes TIME. And, after reading the [RockMigrations Deployments guide](https://www.baumrock.com/en/processwire/modules/rockmigrations/docs/deploy/#update-config.php) I though: It will be so nice to have a blank ProcessWire installation synced to my repository, my local machine, my staging server, and my production environment in a few minutes — without monkey-clicking around between installers and setup screens.
-(Being honest… I usually just have production… but now I can add staging and testing if I want!)
+After reading the [RockMigrations Deployments guide](https://www.baumrock.com/en/processwire/modules/rockmigrations/docs/deploy/#update-config.php), I loved finally being able to publish/update a website with just a commit; that was a game changer for someone still using FTP. But wiring it all up the whole thing —ProcessWire, modules, repo, secrets, workflows, keys— was a time sucker.
+
+DeWire builds on that idea, cutting the manual steps so your project is multi-environment deploy–ready from the start.
 
 
 ## Installation
 
 ```bash
-ddev add-on get lemachinarbo/ddev-compwser
+ddev add-on get lemachinarbo/ddev-dewire
 ```
+
+## Guides
+
+- How to [Install Processwire](https://github.com/lemachinarbo/ddev-dewire/wiki/(How-to)-Install-Processwire) from zero
+- How to [customize Processwire installation](https://github.com/lemachinarbo/ddev-dewire/wiki/(How-to)-Install-Processwire#customizing-your-installation)
 
 
 ## Use Cases
 
-### TL;DR
+### 1. Installing Processwire
 
-- `ddev cpw-install` – Installs ProcessWire. No prerequisites required.
-- `ddev cpw-deploy` – Automates deployment to production, staging, or dev. Requires GitHub CLI, SSH keys, and a personal access token.
-- `ddev compwser` – Installs and deploys with minimal prompts. Requires same prerequisites as deploy.
-
-### 1. Just install ProcessWire
+`ddev dw-install` *Installs ProcessWire. No prerequisites required.*
 
 ```bash
-ddev cpw-install
+mkdir myproject
+cd myproject
+ddev config --auto
+ddev add-on get lemachinarbo/ddev-dewired
+ddev dw-install
 ```
 
-**What It Does**
-- Downloads [ProcessWire](https://github.com/processwire/processwire/)
-- Installs ProcessWire in `/public`
-- Initializes a local Git repository with main as the initial branch 
-- Adds [RockMigrations](https://github.com/baumrock/RockMigrations) and [RockShell](https://github.com/baumrock/RockShell) as Git submodules
-- Installs the RockMigrations module
-- Backups Database
-- Cleans up leftover core files
-- Adds a `.gitignore` file for your repository
-- Adds a .env template file
- 
 ### 2. Set up deployment
 
-To setup the deployment environments, we link each environment with its own branch:
+`ddev dw-deploy` *Automates deployment to production, staging, or dev. Requires GitHub CLI, SSH keys, a personal access tokenm and a .env file.*
 
-- Production environment → main/master branch
-- Staging environment → staging/develop branch
-- testing environment → tests/testing branch
-- And so on...
-
-The branch names don’t matter, but keep in mind we’re assuming you’re following an environment-based branching model. This setup doesn’t fit workflows like [trunk-based development](https://atlassian.com/continuous-delivery/continuous-integration/trunk-based-development).
-
-
-#### Steps
-
-First time, we need to configure a few things so GitHub lets us automate the process; once that's done, you'll be able to create *deployment workflows* for any project just by creating the repo/token and filling your .env file. I promise.
-
+To enable GitHub deployments, do a quick one-time setup:
 
 1. Create your SSH keys (*only needed once. Future setups skip this step*).
 
 ```sh
-ddev cpw-sshkeys-gen
+ddev dw-sshkeys-gen
 ```
 
 2. Install the [GitHub CLI](https://github.com/cli/cli#installation) and, once installed, authenticate by running (*also a one-time setup*):
 
 ```sh
-gh auth login
+gh auth login # Select `id_github.pub` as your public SSH key when prompted.
 ```
 
-Select `id_github.pub` as your public SSH key when prompted.
+3. Edit the `.env` [file](https://raw.githubusercontent.com/lemachinarbo/ddev-compwser/dev/compwser/templates/.env.example), which was installed in your root (approot) by the `ddev dw-install` command.
 
-3. Open and edit the `.env` file, which was installed in your project root by the `ddev cpw-install` command. If for any reason you don't have it, you can clone it using:
-
-```sh
-curl -sSL https://raw.githubusercontent.com/lemachinarbo/ddev-compwser/main/compwser/templates/.env.example -o .env
-```
-
-4. Create a [new GitHub repository](https://github.com/new) for your project (private or public, your call):
+2. Create a [new GitHub repository](https://github.com/new) for your project (private or public, your call):
 
 ```sh
 gh repo create <reponame> --private
 
 ```
 
-5. Create a [Personal Access Token](https://github.com/settings/personal-access-tokens), under `Repository access` add your repository, and under `Repository permissions` add Read/Write access for `actions`, `contents`, `deployments`, `secrets`, `variables`, and `workflows`. 
-Copy the token in the `.env` file in this line `CI_TOKEN=xxxx`  
+5. Create a [Personal Access Token](https://github.com/settings/personal-access-tokens). Under `Repository access` add your repository, and under `Repository permissions` add Read/Write access for `actions`, `contents`, `deployments`, `secrets`, `variables`, and `workflows`.
+Copy the token in the `.env` file in this line `CI_TOKEN=xxxx`
 
 6. Run the deployments script:
 
 ```sh
-ddev cpw-deploy
+ddev dw-deploy
 ```
 
 Once the installer finishes, update your web server configuration (using your hosting control panel) to point the `docroot` to `current`. For example, instead of `/var/www/html`, set your website root to `/var/www/html/current` to make your site visible.
 
-Test your website. From now on, simply commit and push to the branch for the environment you want to update, and your changes will go live automatically.
-
-> [!IMPORTANT]
-> If you need multiple environments (e.g., production, staging, testing), update the `.env` accordingly and run `ddev cpw-deploy` **once per environment**.
-
-#### What `ddev cpw-deploy` Does
-- Prompts you at each step so you can skip or rerun any part of the setup
-- Checks for all requirements: `.env` file, SSH keys, GitHub CLI, and repository access
-- Offers to generate missing SSH keys and register them with your server
-- Checks and initializes your git remote and branch for deployment
-- Sets up GitHub Actions variables and secrets for your chosen environment
-- Lets you select which branch to link to your deployment environment and generates workflow files
-- Creates or updates `config-local.php` from your `.env` file for environment-specific overrides
-- Syncs all project files—including ProcessWire, RockShell, and modules—to your remote server
-- Imports your local database to the server for the selected environment
-- Updates the server folder structure and permissions for automated deployments
-
-Where to go next? Check what else you can do when [moving to production](https://www.baumrock.com/en/processwire/modules/rockmigrations/docs/deploy/#rockshell-filesondemand) for tips on how to handle files, images, etc.
-
 
 ### 3. Install and deploy in one command
-
-The first time you create a deployment, there are a few requirements to set up. But once that's done, all you need to start a project from scratch is:
+Alternatively, a harder-better-faster-stronger way to install ProcessWire and deploy an environment is to use `ddev dewire`:
 
 - Complete the `.env` file.
 - Create the repo and Personal Access Token with the right permissions, then copy it to the `CI_TOKEN` variable in your `.env` file.
@@ -136,29 +96,46 @@ The first time you create a deployment, there are a few requirements to set up. 
 And then just run:
 
 ```sh
-ddev compwser
+ddev dewire
 ```
 
-Nice. Time to enjoy some cake.
+Be aware that to run this command you have to be sure your system already has GH CLI installed and authenticated (check steps one and two in [Set up deployment](#2-set-up-deployment)).
+
+> [!Tip]
+> Once you know what you are doing, using `ddev dewire PROD --lazy` gives you a faster, almost zero-prompts deployment.
+> PROD is the name of the environment you defined on your .env file. Check the [dewire command docs](https://github.com/lemachinarbo/ddev-dewire/wiki/dewired#usage).
+
+Nice. Time to enjoy some [cake](https://en.wikipedia.org/wiki/The_cake_is_a_lie).
+
+--- 
+
 
 ## Commands
 
+> [!TIP]
+> Check the [commands documentation](https://github.com/lemachinarbo/ddev-dewire/wiki) for a detailed overview of what happens under the hood each time you run a command.
+
 | Command | Description |
 | ------- | ----------- |
-| `ddev compwser` | Installs ProcessWire and automates publishing your site to production, staging, or dev with GitHub Actions |
-| `ddev cpw-install` | Install and bootstrap ProcessWire project |
-| `ddev cpw-deploy` | Automate all setup and deployment steps for publishing your site to any environment |
-| `ddev cpw-config-split` | Split config.php into config-local.php for a selected environment |
-| `ddev cpw-gh-env` | Automate setup of GitHub Actions repository variables and secrets |
-| `ddev cpw-gh-workflow` | Generate GitHub Actions workflow YAMLs for each environment/branch pair |
-| `ddev cpw-sshkeys-gen` | Generate personal and project SSH keys if they do not exist |
-| `ddev cpw-sshkeys-install` | Register personal and project SSH keys on a remote server and test authentication |
-| `ddev cpw-sync` | Sync files to the selected environment's server using rsync |
-| `ddev rs` | Shorcut to run RockShell inside the web container |
+| [ddev dewire](https://github.com/lemachinarbo/ddev-dewire/wiki/dewire) | Installs ProcessWire and automates publishing your site to production, staging, or dev with GitHub Actions |
+| [ddev dw-config-split](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90config%E2%80%90split) | Split `config.php` into `config-local.php` for a selected environment |
+| [ddev dw-db-import](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90db%E2%80%90import) | Import a database dump into the current environment |
+| [ddev dw-deploy](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90deploy) | Automate all setup and deployment steps for publishing your site to any environment |
+| [ddev dw-gh-env](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90gh%E2%80%90env) | Automate setup of GitHub Actions repository variables and secrets |
+| [ddev dw-gh-workflow](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90gh%E2%80%90workflow) | Generate GitHub Actions workflow YAMLs for each environment/branch pair |
+| [ddev dw-git-remote](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90git%E2%80%90remote) | Manage git remotes for deployment |
+| [ddev dw-install](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90install) | Install and bootstrap ProcessWire project |
+| [ddev dw-sshkeys-gen](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90sshkeys%E2%80%90gen) | Generate personal and project SSH keys if they do not exist |
+| [ddev dw-sshkeys-install](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90sshkeys%E2%80%90install) | Register personal and project SSH keys on a remote server and test authentication |
+| [ddev dw-sync](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90sync) | Sync files to the selected environment's server using rsync |
+| [ddev dw-transform](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90transform) | Transform files or configuration for deployment |
+| [ddev rs](https://github.com/lemachinarbo/ddev-dewire/wiki/rs) | Shortcut to run RockShell 🤍 inside the web container |
 
 
 ## Credits
 
 - Contributed and maintained by [@lemachinarbo](https://github.com/lemachinarbo)
-- Inspired by the lovely modules created by [@BernhardBaumrock](https://github.com/BernhardBaumrock/)
-- Using [MoritzLost](https://github.com/moritzlost) [processwire.dev structure](https://github.com/MoritzLost/ProcessWireDev/blob/master/site/02-setup-and-structure/02-integrate-composer-with-processwire.md)
+- Inspired by the lovely modules from [@BernhardBaumrock](https://github.com/BernhardBaumrock/)
+- Using [MoritzLost](https://github.com/moritzlost)'s [processwire.dev structure](https://github.com/MoritzLost/ProcessWireDev/blob/master/site/02-setup-and-structure/02-integrate-composer-with-processwire.md)
+- By the grace of [Ryan Cramer](https://github.com/ryancramerdesign) for creating ProcessWire
+- Powered by [DDEV](https://github.com/drud/ddev), which makes local dev painless

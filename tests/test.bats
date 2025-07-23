@@ -94,58 +94,58 @@ teardown() {
 #   health_checks
 # }
 
-@test "compwser command is available" {
-  run ddev compwser --help
+@test "dewire command is available" {
+  run ddev dewire --help
   assert_success
-  assert_output --partial "comPWser"
+  assert_output --partial "dewire"
 }
 
-@test "cpw-install command runs" {
-  run ddev cpw-install --help
+@test "dw-install command runs" {
+  run ddev dw-install --help
   assert_success
-  assert_output --partial "cpw-install"
+  assert_output --partial "dw-install"
 }
 
-@test "cpw-deploy command runs" {
-  run ddev cpw-deploy --help
+@test "dw-deploy command runs" {
+  run ddev dw-deploy --help
   assert_success
-  assert_output --partial "cpw-deploy"
+  assert_output --partial "dw-deploy"
 }
 
-@test "cpw-config-split command runs" {
-  run ddev cpw-config-split --help
+@test "dw-config-split command runs" {
+  run ddev dw-config-split --help
   assert_success
-  assert_output --partial "cpw-config-split"
+  assert_output --partial "dw-config-split"
 }
 
-@test "cpw-gh-env command runs" {
-  run ddev cpw-gh-env --help
+@test "dw-gh-env command runs" {
+  run ddev dw-gh-env --help
   assert_success
-  assert_output --partial "cpw-gh-env"
+  assert_output --partial "dw-gh-env"
 }
 
-@test "cpw-gh-workflow command runs" {
-  run ddev cpw-gh-workflow --help
+@test "dw-gh-workflow command runs" {
+  run ddev dw-gh-workflow --help
   assert_success
-  assert_output --partial "cpw-gh-workflow"
+  assert_output --partial "dw-gh-workflow"
 }
 
-@test "cpw-sshkeys-gen command runs" {
-  run ddev cpw-sshkeys-gen --help
+@test "dw-sshkeys-gen command runs" {
+  run ddev dw-sshkeys-gen --help
   assert_success
-  assert_output --partial "cpw-sshkeys-gen"
+  assert_output --partial "dw-sshkeys-gen"
 }
 
-@test "cpw-sshkeys-install command runs" {
-  run ddev cpw-sshkeys-install --help
+@test "dw-sshkeys-install command runs" {
+  run ddev dw-sshkeys-install --help
   assert_success
-  assert_output --partial "cpw-sshkeys-install"
+  assert_output --partial "dw-sshkeys-install"
 }
 
-@test "cpw-sync command runs" {
-  run ddev cpw-sync --help
+@test "dw-sync command runs" {
+  run ddev dw-sync --help
   assert_success
-  assert_output --partial "cpw-sync"
+  assert_output --partial "dw-sync"
 }
 
 @test "rs command runs" {

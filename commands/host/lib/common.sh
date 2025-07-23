@@ -1,10 +1,13 @@
 #ddev-generated
 
-APP_DIR="compwser"
+APP_DIR="dewire"
 APP_PATH="$DDEV_APPROOT/.ddev/$APP_DIR"
 : "${LAZY_MODE:=false}"
 
 export APP_PATH
+
+
+# ================================
 
 # Colors
 GREEN='\033[0;32m'
@@ -13,11 +16,23 @@ YELLOW='\033[1;33m'
 MAGENTA='\033[1;35m'
 NC='\033[0m' # No Color
 
+# Status symbols
+SYM_OK="✓"
+SYM_ERROR="☓"
+SYM_NOT_SET="○"
+SYM_WARNING="!"
+
+# Colored status symbols
+SYM_OK_COLOR="${GREEN}${SYM_OK}${NC}"
+SYM_ERROR_COLOR="${RED}${SYM_ERROR}${NC}"
+SYM_NOT_SET_COLOR="${YELLOW}${SYM_NOT_SET}${NC}"
+SYM_WARNING_COLOR="${YELLOW}${SYM_WARNING}${NC}"
+
 # Logging helpers
 log_hr() { echo -e "${YELLOW}----------------------------------------${NC}"; }
-log_warn() { echo -e "${YELLOW}⚠ ${NC} $*"; }
-log_error() { echo -e "${RED}✗ ${NC} $*"; }
-log_ok() { echo -e "${GREEN}✓ ${NC} $*"; }
+log_warn() { echo -e "${SYM_WARNING_COLOR} $*"; }
+log_error() { echo -e "${SYM_ERROR_COLOR} $*"; }
+log_ok() { echo -e "${SYM_OK_COLOR} $*"; }
 log_success() { echo -e "${GREEN}$*"; }
 log_info() { echo -e "${NC}$*"; }
 log_header() {
@@ -53,36 +68,6 @@ log_step() {
   echo -e "${NC}"
 }
 
-get_env_var() {
-    local prefix="$1"
-    local var="$2"
-    local env_file="$3"
-    grep "^${prefix}${var}=" "$env_file" | cut -d'=' -f2-
-}
-
-# Usage: get_env_default <VAR> <DEFAULT>
-get_env_default() {
-    local var="$1"
-    local default="$2"
-    local value
-    value=$(get_env_var "" "$var" "$ENV_FILE")
-    echo "${value:-$default}"
-}
-
-get_env_environments() {
-    local env_file="${1:-$ENV_FILE}"
-    grep '^ENVIRONMENTS=' "$env_file" | cut -d'=' -f2- | tr -d '"'
-}
-
-ENV_FILE=".env"
-
-check_env_file_exists() {
-    if [ ! -f "$ENV_FILE" ]; then
-        log_fatal ".env file not found at $ENV_FILE. Aborting."
-        exit 1
-    fi
-    log_ok ".env file found at $ENV_FILE."
-}
 
 # Usage: select_environment [env_arg] [environments_var]
 select_environment() {
@@ -147,6 +132,7 @@ ask_user() {
   if [ "$LAZY_MODE" = true ] && [ "$critical" = false ]; then
     reply="y"
     log_ask "$prompt y (auto)"
+    echo  # Add newline after auto response
   else
     log_ask "$prompt"
     read reply
@@ -155,3 +141,84 @@ ask_user() {
   REPLY="$reply"
 }
 
+# Compatibility helper functions for cross-platform support
+
+# OS detection
+is_macos() { [[ "$OSTYPE" == "darwin"* ]]; }
+
+# Compatible sed in-place editing
+sed_inplace() {
+    local pattern="$1" file="$2"
+    if is_macos; then 
+        sed -i '' "$pattern" "$file"
+    else 
+        sed -i "$pattern" "$file"
+    fi
+}
+
+# Compatible lowercase conversion
+to_lower() { echo "$1" | tr '[:upper:]' '[:lower:]'; }
+
+# Comprehensive argument parser for scripts that need multiple flags
+# Usage: parse_script_args "$@"
+# Supports: --lazy, --silent, --debug, --local
+# Sets global variables: LAZY_MODE, SILENT_FLAG, DEBUG_MODE, LOCAL_FLAG, PARSED_ARGS
+# Example:
+#   parse_script_args "$@"
+#   validate_and_load_env "${PARSED_ARGS[0]:-}" "$SILENT_FLAG"
+parse_script_args() {
+    LAZY_MODE=false
+    SILENT_FLAG=""
+    DEBUG_MODE=false
+    LOCAL_FLAG=""
+    PARSED_ARGS=()
+    
+    for arg in "$@"; do
+        case "$arg" in
+            --lazy)
+                LAZY_MODE=true
+                ;;
+            --silent)
+                SILENT_FLAG="--silent"
+                ;;
+            --debug)
+                DEBUG_MODE=true
+                ;;
+            --local)
+                LOCAL_FLAG="--local"
+                ;;
+            *)
+                PARSED_ARGS+=("$arg")
+                ;;
+        esac
+    done
+    
+    # Export debug mode for use in functions
+    export DEBUG_MODE
+}
+
+# Lightweight parser for scripts that only need --silent flag
+# Usage: parse_silent_flag "$@"
+# Sets global variables: SILENT_FLAG, SILENT_ARGS
+# Example:
+#   parse_silent_flag "$@"
+#   validate_and_load_env "${SILENT_ARGS[0]:-}" "$SILENT_FLAG"
+parse_silent_flag() {
+    SILENT_FLAG=""
+    SILENT_ARGS=()
+    
+    for arg in "$@"; do
+        if [[ "$arg" == "--silent" ]]; then
+            SILENT_FLAG="--silent"
+        else
+            SILENT_ARGS+=("$arg")
+        fi
+    done
+}
+
+# ================================
+# LOAD ENVIRONMENT FUNCTIONS
+# ================================
+
+# Source the environment loader module
+source "$(dirname "${BASH_SOURCE[0]}")/env-loader.sh"

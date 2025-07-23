@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+#ddev-generated
+## Description: Update environment folder structure on the remote server
+## Usage: dw-transform [ENV]
+
+set -euo pipefail
+trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
+
+# Source common logging/colors and helpers
+source "$(dirname "$0")/lib/common.sh"
+
+if [[ "${1:-}" == "--help" ]]; then
+    echo "dw-transform: Update environment folder structure on the remote server."
+    echo "Usage: ddev dw-transform [ENV] [--silent] [--lazy]"
+    exit 0
+fi
+
+main() {
+    # Parse all common script arguments
+    parse_script_args "$@"
+    
+    validate_and_load_env "${PARSED_ARGS[0]:-}" "$SILENT_FLAG"
+    update_folder_structure
+}
+
+update_folder_structure() {
+    if [ -z "$REMOTE_USER" ] || [ -z "$REMOTE_HOST" ] || [ -z "$REMOTE_PATH" ]; then
+        log_fatal "One or more required variables (SSH_USER, SSH_HOST, DEPLOY_PATH) are empty. Check your .env file for ${ENV}_SSH_USER, ${ENV}_SSH_HOST, and ${ENV}_PATH."
+        exit 1
+    fi
+    echo
+    if [ "$LAZY_MODE" = true ]; then
+        ssh -i "$SSH_KEY_PATH" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && php RockShell/rock rm:transform --lazy && find . -type d -exec chmod $CHMOD_DIR {} \; && find . -type f -exec chmod $CHMOD_FILE {} \;"
+    else
+        ssh -i "$SSH_KEY_PATH" "$REMOTE_USER@$REMOTE_HOST" "cd $REMOTE_PATH && php RockShell/rock rm:transform && find . -type d -exec chmod $CHMOD_DIR {} \; && find . -type f -exec chmod $CHMOD_FILE {} \;"
+    fi
+}
+
+main "$@"
