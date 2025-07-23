@@ -4,7 +4,7 @@
 [![release](https://img.shields.io/github/v/release/lemachinarbo/ddev-dewire)](https://github.com/lemachinarbo/ddev-dewire/releases/latest)
 
 # DDEV DeWire
-Simplify ProcessWire deployments with a single DDEV command: **De**fine once, **De**ploy everywhere.
+*Simplify ProcessWire deployments with a single DDEV command: **De**fine once, **De**ploy everywhere.*
 
 DeWire installs [ProcessWire](https://github.com/processwire/processwire) and automates GitHub as your deployment control center — manage dev, staging, and prod from a single source of truth.
 
@@ -27,6 +27,12 @@ DeWire builds on that idea, cutting the manual steps so your project is multi-en
 ```bash
 ddev add-on get lemachinarbo/ddev-dewire
 ```
+
+## Guides
+
+- How to [Install Processwire](https://github.com/lemachinarbo/ddev-dewire/wiki/(How-to)-Install-Processwire) from zero
+- How to [customize Processwire installation](https://github.com/lemachinarbo/ddev-dewire/wiki/(How-to)-Install-Processwire#customizing-your-installation)
+
 
 ## Use Cases
 
@@ -82,8 +88,7 @@ Once the installer finishes, update your web server configuration (using your ho
 
 
 ### 3. Install and deploy in one command
-
-The first time you create a deployment, there are a few requirements to set up (check steps one and two on [Setup a deployment](#2-set-up-deployment) ). But once that's done, all you need to start a project from scratch is:
+Alternatively, a harder-better-faster-stronger way to install ProcessWire and deploy an environment is to use `ddev dewire`:
 
 - Complete the `.env` file.
 - Create the repo and Personal Access Token with the right permissions, then copy it to the `CI_TOKEN` variable in your `.env` file.
@@ -94,13 +99,13 @@ And then just run:
 ddev dewire
 ```
 
+Be aware that to run this command you have to be sure your system already has GH CLI installed and authenticated (check steps one and two in [Set up deployment](#2-set-up-deployment)).
+
+> [!Tip]
+> Once you know what you are doing, using `ddev dewire PROD --lazy` gives you a faster, almost zero-prompts deployment.
+> PROD is the name of the environment you defined on your .env file. Check the [dewire command docs](https://github.com/lemachinarbo/ddev-dewire/wiki/dewired#usage).
+
 Nice. Time to enjoy some [cake](https://en.wikipedia.org/wiki/The_cake_is_a_lie).
-
-
-## Guides
-
-- How to [Install Processwire](https://github.com/lemachinarbo/ddev-dewire/wiki/(How-to)-Install-Processwire) from zero
-- How to [customize Processwire installation](https://github.com/lemachinarbo/ddev-dewire/wiki/(How-to)-Install-Processwire#customizing-your-installation)
 
 --- 
 
