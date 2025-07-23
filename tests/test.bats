@@ -94,10 +94,10 @@ teardown() {
 #   health_checks
 # }
 
-@test "dewired command is available" {
-  run ddev dewired --help
+@test "dewire command is available" {
+  run ddev dewire --help
   assert_success
-  assert_output --partial "dewired"
+  assert_output --partial "dewire"
 }
 
 @test "dw-install command runs" {

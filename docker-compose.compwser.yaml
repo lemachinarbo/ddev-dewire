@@ -2,7 +2,7 @@
 # Simple template to demonstrate compwser
 services:
   compwser:
-    container_name: ddev-${DDEV_SITENAME}-dewired
+    container_name: ddev-${DDEV_SITENAME}-dewire
     image: ${DEWIRED_DOCKER_IMAGE:-busybox:stable}
     command: tail -f /dev/null
     restart: "no"

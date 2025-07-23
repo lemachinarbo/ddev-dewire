@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #ddev-generated
 ## Description: Installs ProcessWire and automates publishing your site to production, staging, or dev with GitHub Actions
-## Usage: dewired [ENV]
+## Usage: dewire [ENV]
 
 set -euo pipefail
 trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
@@ -10,8 +10,8 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
-    echo "dewired: Installs ProcessWire and sets up GitHub deployment workflows in one step."
-    echo "Usage: ddev dewired [--lazy] [--silent]"
+    echo "dewire: Installs ProcessWire and sets up GitHub deployment workflows in one step."
+    echo "Usage: ddev dewire [--lazy] [--silent]"
     exit 0
 fi
 
@@ -19,7 +19,7 @@ main() {
     # Parse script arguments
     parse_script_args "$@"
     
-    log_header "Welcome to DeWired!"
+    log_header "Welcome to DeWire!"
     log_info "This will install ProcessWire and set up GitHub deployment workflows."
     log_info "Ensure requirements are met and .env is filled out; or don’t, we’ll verify it for you."
     

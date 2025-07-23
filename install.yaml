@@ -1,11 +1,11 @@
-name: dewired
+name: dewire
 
 project_files:
   - docker-compose.compwser.yaml
   - commands/host/lib/common.sh
   - commands/host/lib/env-loader.sh
   - commands/host/lib/.env.schema
-  - commands/host/dewired
+  - commands/host/dewire
   - commands/host/dw-config-split
   - commands/host/dw-db-import
   - commands/host/dw-gh-env
@@ -18,6 +18,6 @@ project_files:
   - commands/host/dw-sshkeys-install
   - commands/host/dw-sync
   - commands/host/dw-transform
-  - dewired/
+  - dewire/
 
 ddev_version_constraint: '>= v1.24.3'

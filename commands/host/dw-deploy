@@ -10,7 +10,7 @@ trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
 source "$(dirname "$0")/lib/common.sh"
 
 if [[ "${1:-}" == "--help" ]]; then
-    echo "dw-deploy: Orchestrates all setup and deployment steps for DeWired."
+    echo "dw-deploy: Orchestrates all setup and deployment steps for DeWire."
     echo "Usage: ddev dw-deploy [ENV] [--lazy]"
     exit 0
 fi
@@ -19,7 +19,7 @@ main() {
     # Parse script arguments
     parse_script_args "$@"
     
-    log_header "Welcome to the DeWired Environment Setup tool"
+    log_header "Welcome to the DeWire Environment Setup tool"
     log_info "This script will guide you through setting up your environment for automated deployments."
     
     # First check basic requirements (tools, files, etc)

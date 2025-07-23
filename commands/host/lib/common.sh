@@ -1,6 +1,6 @@
 #ddev-generated
 
-APP_DIR="dewired"
+APP_DIR="dewire"
 APP_PATH="$DDEV_APPROOT/.ddev/$APP_DIR"
 : "${LAZY_MODE:=false}"
 
