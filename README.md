@@ -99,8 +99,8 @@ Nice. Time to enjoy some [cake](https://en.wikipedia.org/wiki/The_cake_is_a_lie)
 
 ## Guides
 
-- How to [Install Processwire](../wiki/How-to-‐-Install-Processwire#installing-from-zero) from zero
-- How to [customize Processwire installation](../wiki/How-to-‐-Install-Processwire#customizing-your-installation)
+- How to [Install Processwire](https://github.com/lemachinarbo/ddev-dewire/wiki/(How-to)-Install-Processwire) from zero
+- How to [customize Processwire installation](https://github.com/lemachinarbo/ddev-dewire/wiki/(How-to)-Install-Processwire#customizing-your-installation)
 
 --- 
 
@@ -108,23 +108,23 @@ Nice. Time to enjoy some [cake](https://en.wikipedia.org/wiki/The_cake_is_a_lie)
 ## Commands
 
 > [!TIP]
-> Check the [commands documentation](wiki) for a detailed overview of what happens under the hood each time you run a command.
+> Check the [commands documentation](https://github.com/lemachinarbo/ddev-dewire/wiki) for a detailed overview of what happens under the hood each time you run a command.
 
 | Command | Description |
 | ------- | ----------- |
-| [ddev dewire](wiki/dewire) | Installs ProcessWire and automates publishing your site to production, staging, or dev with GitHub Actions |
-| [ddev dw-config-split](wiki/dw-config-split) | Split `config.php` into `config-local.php` for a selected environment |
-| [ddev dw-db-import](wiki/dw-db-import) | Import a database dump into the current environment |
-| [ddev dw-deploy](wiki/dw-deploy) | Automate all setup and deployment steps for publishing your site to any environment |
-| [ddev dw-gh-env](wiki/dw-gh-env) | Automate setup of GitHub Actions repository variables and secrets |
-| [ddev dw-gh-workflow](wiki/dw-gh-workflow) | Generate GitHub Actions workflow YAMLs for each environment/branch pair |
-| [ddev dw-git-remote](wiki/dw-git-remote) | Manage git remotes for deployment |
-| [ddev dw-install](wiki/dw-install) | Install and bootstrap ProcessWire project |
-| [ddev dw-sshkeys-gen](wiki/dw-sshkeys-gen) | Generate personal and project SSH keys if they do not exist |
-| [ddev dw-sshkeys-install](wiki/dw-sshkeys-install) | Register personal and project SSH keys on a remote server and test authentication |
-| [ddev dw-sync](wiki/dw-sync) | Sync files to the selected environment's server using rsync |
-| [ddev dw-transform](wiki/dw-transform) | Transform files or configuration for deployment |
-| [ddev rs](wiki/rs) | Shortcut to run RockShell 🤍 inside the web container |
+| [ddev dewire](https://github.com/lemachinarbo/ddev-dewire/wiki/dewire) | Installs ProcessWire and automates publishing your site to production, staging, or dev with GitHub Actions |
+| [ddev dw-config-split](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90config%E2%80%90split) | Split `config.php` into `config-local.php` for a selected environment |
+| [ddev dw-db-import](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90db%E2%80%90import) | Import a database dump into the current environment |
+| [ddev dw-deploy](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90deploy) | Automate all setup and deployment steps for publishing your site to any environment |
+| [ddev dw-gh-env](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90gh%E2%80%90env) | Automate setup of GitHub Actions repository variables and secrets |
+| [ddev dw-gh-workflow](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90gh%E2%80%90workflow) | Generate GitHub Actions workflow YAMLs for each environment/branch pair |
+| [ddev dw-git-remote](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90git%E2%80%90remote) | Manage git remotes for deployment |
+| [ddev dw-install](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90install) | Install and bootstrap ProcessWire project |
+| [ddev dw-sshkeys-gen](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90sshkeys%E2%80%90gen) | Generate personal and project SSH keys if they do not exist |
+| [ddev dw-sshkeys-install](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90sshkeys%E2%80%90install) | Register personal and project SSH keys on a remote server and test authentication |
+| [ddev dw-sync](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90sync) | Sync files to the selected environment's server using rsync |
+| [ddev dw-transform](https://github.com/lemachinarbo/ddev-dewire/wiki/dw%E2%80%90transform) | Transform files or configuration for deployment |
+| [ddev rs](https://github.com/lemachinarbo/ddev-dewire/wiki/rs) | Shortcut to run RockShell 🤍 inside the web container |
 
 
 ## Credits
