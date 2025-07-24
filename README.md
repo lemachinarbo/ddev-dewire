@@ -4,9 +4,10 @@
 [![release](https://img.shields.io/github/v/release/lemachinarbo/ddev-dewire)](https://github.com/lemachinarbo/ddev-dewire/releases/latest)
 
 # DDEV DeWire
-*Simplify ProcessWire deployments with a single DDEV command: **De**fine once, **De**ploy everywhere.*
+*Simplify ProcessWire deployments with a single DDEV command.*
 
-DeWire installs [ProcessWire](https://github.com/processwire/processwire) and automates GitHub as your deployment control center — manage dev, staging, and prod from a single source of truth.
+DeWire installs [ProcessWire](https://github.com/processwire/processwire) and automates GitHub as your deployment control center, so you can manage dev, staging, and prod from a single source of truth.
+
 
 With DeWire you can do 3 things:
 
@@ -14,6 +15,9 @@ With DeWire you can do 3 things:
 2. Install ProcessWire *and* [deploy your site](#2-set-up-deployment) (prod, staging, etc.) step by step — one command.
 3. [Do both at once](#3-install-and-deploy-in-one-command) in auto mode with minimal prompts… yep, one command.
 4. Nope, just 3.
+
+<img width="1200" height="695" alt="Totally not a Fallout ripoff! See, her jumpsuit’s red" src="https://github.com/user-attachments/assets/5032c77b-5a37-4970-819e-5fbbab66b360" />
+
 
 ## Why?
 
@@ -71,7 +75,7 @@ gh auth login # Select `id_github.pub` as your public SSH key when prompted.
 2. Create a [new GitHub repository](https://github.com/new) for your project (private or public, your call):
 
 ```sh
-gh repo create <reponame> --private
+gh repo create reponame --private
 
 ```
 
@@ -99,7 +103,7 @@ And then just run:
 ddev dewire
 ```
 
-Be aware that to run this command you have to be sure your system already has GH CLI installed and authenticated (check steps one and two in [Set up deployment](#2-set-up-deployment)).
+Be aware that to run this command you have to be sure your system already has [GitHub CLI](https://github.com/cli/cli#installation) installed and authenticated (check steps one and two in [Set up deployment](#2-set-up-deployment)).
 
 > [!Tip]
 > Once you know what you are doing, using `ddev dewire PROD --lazy` gives you a faster, almost zero-prompts deployment.
