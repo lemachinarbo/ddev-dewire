@@ -6,7 +6,7 @@
 # DDEV DeWire
 *Simplify ProcessWire deployments with a single DDEV command.*
 
-DeWire installs [ProcessWire](https://github.com/processwire/processwire) and automates GitHub as your deployment control center, so you can manage dev, staging, and prod from a single source of truth.
+DeWire installs [ProcessWire](https://github.com/processwire/processwire) and uses GitHub as your deployment control center, automating environment deployments (prod, dev, staging…) from a single source of truth.
 
 
 With DeWire you can do 3 things:
