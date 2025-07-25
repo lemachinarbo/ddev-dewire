@@ -1,0 +1,1055 @@
+#!/usr/bin/env bash
+#ddev-generated
+## Description: Schema-driven GitHub environment setup with interactive wizard mode
+## Usage: dw-gh-env [ENV] [--silent] [--debug] [--dontaskme]
+
+set -euo pipefail
+trap 'log_error "Command \"$BASH_COMMAND\" failed at line $LINENO"; exit 1' ERR
+
+# Source common logging/colors and helpers
+source "$(dirname "$0")/lib/common.sh"
+
+if [[ "${1:-}" == "--help" ]]; then
+    echo "dw-gh-env: Schema-driven GitHub environment setup with interactive wizard mode."
+    echo "Usage: ddev dw-gh-env [ENV] [--silent] [--debug] [--dontaskme]"
+    echo ""
+    echo "Options:"
+    echo "  --silent     Run silently without prompts"
+    echo "  --debug      Show detailed debug information"
+    echo "  --dontaskme  Skip all prompts, only upload schema-defined vars"
+    echo ""
+    echo "If no .env file exists, enters interactive wizard mode."
+    exit 0
+fi
+
+main() {
+    # Export NO_COLOR globally to ensure all gh commands use plain output
+    export NO_COLOR=1
+    
+    # Parse script arguments including debug flag and new dontaskme flag
+    parse_enhanced_args "$@"
+    
+    # Check if .env exists, if not enter wizard mode
+    if [ ! -f ".env" ]; then
+        enter_wizard_mode
+    else
+        validate_and_load_env "${PARSED_ARGS[0]:-}" "$SILENT_FLAG"
+    fi
+    
+    check_gh_cli
+    check_gh_auth
+    check_repo_access
+    setup_known_hosts
+    summary
+    upload_github_secrets_and_vars
+}
+
+# Enhanced argument parser to handle --dontaskme flag
+parse_enhanced_args() {
+    LAZY_MODE=false
+    SILENT_FLAG=""
+    DEBUG_MODE=false
+    DONTASKME_FLAG=false
+    PARSED_ARGS=()
+    
+    for arg in "$@"; do
+        case "$arg" in
+            --lazy)
+                LAZY_MODE=true
+                ;;
+            --silent)
+                SILENT_FLAG="--silent"
+                ;;
+            --debug)
+                DEBUG_MODE=true
+                ;;
+            --dontaskme)
+                DONTASKME_FLAG=true
+                ;;
+            *)
+                PARSED_ARGS+=("$arg")
+                ;;
+        esac
+    done
+    
+    # Export flags for use in functions
+    export DEBUG_MODE DONTASKME_FLAG
+}
+
+# Interactive wizard mode for .env setup
+enter_wizard_mode() {
+    log_header "DeWire Environment Setup Wizard v1"
+    log_info "No .env file found. Let's set up your environment."
+    
+    # Load schema first
+    log_info "Loading schema..."
+    parse_env_schema false
+    log_info "Schema loaded: ${#REQUIRED_VARS[@]} required, ${#OPTIONAL_VARS[@]} optional repo vars"
+    log_info "Local vars: ${#LOCAL_REQUIRED_VARS[@]} required, ${#LOCAL_OPTIONAL_VARS[@]} optional"
+    log_info "Env vars: ${#ENV_REQUIRED_VARS[@]} required, ${#ENV_OPTIONAL_VARS[@]} optional"
+    
+    # Load existing .env.setup if present
+    local setup_file=".env.setup"
+    if [ -f "$setup_file" ]; then
+        log_ok "Found existing .env.setup file, loading values..."
+        ENV_FILE="$setup_file"
+        if [ "$DEBUG_MODE" = "true" ]; then
+            log_info "Set ENV_FILE to: $ENV_FILE"
+        fi
+    else
+        if [ "$DEBUG_MODE" = "true" ]; then
+            log_info "No .env.setup file found"
+        fi
+    fi
+    
+    # Parse dewire behavior flags from .env.setup
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_info "Calling parse_dewire_flags..."
+    fi
+    parse_dewire_flags
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_info "Completed parse_dewire_flags"
+    fi
+    
+    # Show setup options menu
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_info "Calling show_setup_menu..."
+    fi
+    show_setup_menu
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_info "Completed show_setup_menu, SETUP_MODE: $SETUP_MODE"
+    fi
+    
+    # Generate .env file based on selection
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_info "Calling generate_env_file..."
+    fi
+    generate_env_file
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_info "Completed generate_env_file"
+    fi
+    
+    # Load the newly created .env
+    ENV_FILE=".env"
+    validate_and_load_env "${PARSED_ARGS[0]:-}" "$SILENT_FLAG"
+}
+
+# Parse DEWIRE_* behavior flags from .env.setup
+parse_dewire_flags() {
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_info "Entering parse_dewire_flags, ENV_FILE: $ENV_FILE"
+    fi
+    
+    # Safely get environment variables with error handling
+    DEWIRE_ALLOW_CUSTOM_VARS=""
+    DEWIRE_ASK_ON_CUSTOM_VARS=""
+    
+    if [ -f "$ENV_FILE" ]; then
+        DEWIRE_ALLOW_CUSTOM_VARS=$(get_env_var "" "DEWIRE_ALLOW_CUSTOM_VARS" "$ENV_FILE" || echo "")
+        DEWIRE_ASK_ON_CUSTOM_VARS=$(get_env_var "" "DEWIRE_ASK_ON_CUSTOM_VARS" "$ENV_FILE" || echo "")
+    fi
+    
+    # Set defaults
+    DEWIRE_ALLOW_CUSTOM_VARS=${DEWIRE_ALLOW_CUSTOM_VARS:-true}
+    DEWIRE_ASK_ON_CUSTOM_VARS=${DEWIRE_ASK_ON_CUSTOM_VARS:-true}
+    
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_info "DEWIRE_ALLOW_CUSTOM_VARS: $DEWIRE_ALLOW_CUSTOM_VARS"
+        log_info "DEWIRE_ASK_ON_CUSTOM_VARS: $DEWIRE_ASK_ON_CUSTOM_VARS"
+    fi
+}
+
+# Show interactive setup menu
+show_setup_menu() {
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_info "Entering show_setup_menu function"
+        log_info "SILENT_FLAG: '$SILENT_FLAG'"
+        log_info "Arguments passed: '$*'"
+    fi
+    
+    if [ "$SILENT_FLAG" = "--silent" ]; then
+        SETUP_MODE="all"
+        if [ "$DEBUG_MODE" = "true" ]; then
+            log_info "Silent mode detected, setting SETUP_MODE to 'all'"
+        fi
+        return
+    fi
+    
+    # Check for -a, -l, -e arguments in the wizard mode
+    for arg in "${PARSED_ARGS[@]}"; do
+        case "$arg" in
+            -a)
+                SETUP_MODE="all"
+                if [ "$DEBUG_MODE" = "true" ]; then
+                    log_info "Found -a argument, setting SETUP_MODE to 'all'"
+                fi
+                return
+                ;;
+            -l)
+                SETUP_MODE="local"
+                if [ "$DEBUG_MODE" = "true" ]; then
+                    log_info "Found -l argument, setting SETUP_MODE to 'local'"
+                fi
+                return
+                ;;
+            -e)
+                SETUP_MODE="env"
+                if [ "$DEBUG_MODE" = "true" ]; then
+                    log_info "Found -e argument, setting SETUP_MODE to 'env'"
+                fi
+                return
+                ;;
+        esac
+    done
+    
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_info "No mode arguments found, showing interactive menu"
+    fi
+    
+    echo
+    log_info "What do you want to setup?"
+    log_option 1 "Setup local environment only"
+    log_option 2 "Setup deployment environments (e.g., staging/prod)"
+    log_option 3 "Setup all (local + environments)"
+    
+    local selection
+    while true; do
+        log_ask "Select setup mode [3]: "
+        read -r selection
+        selection=${selection:-3}
+        
+        case "$selection" in
+            1)
+                SETUP_MODE="local"
+                break
+                ;;
+            2)
+                SETUP_MODE="env"
+                break
+                ;;
+            3)
+                SETUP_MODE="all"
+                break
+                ;;
+            *)
+                log_warn "Invalid selection. Please choose 1, 2, or 3."
+                ;;
+        esac
+    done
+    
+    log_ok "Selected: $SETUP_MODE mode"
+}
+
+# Generate .env file based on setup mode and user input
+generate_env_file() {
+    local env_file=".env"
+    
+    log_info "Generating $env_file file..."
+    
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_info "Setup mode: $SETUP_MODE"
+    fi
+    
+    # Start with empty file
+    cat > "$env_file" << 'EOF'
+# DeWire Environment Configuration
+# Generated by dw-gh-env wizard
+# DO NOT commit this file to version control
+
+EOF
+    
+    # Add behavior flags
+    cat >> "$env_file" << EOF
+# DeWire behavior flags
+DEWIRE_ALLOW_CUSTOM_VARS=$DEWIRE_ALLOW_CUSTOM_VARS
+DEWIRE_ASK_ON_CUSTOM_VARS=$DEWIRE_ASK_ON_CUSTOM_VARS
+
+EOF
+    
+    case "$SETUP_MODE" in
+        "local")
+            if [ "$DEBUG_MODE" = "true" ]; then
+                log_info "Generating local variables..."
+            fi
+            generate_local_vars "$env_file"
+            ;;
+        "env")
+            if [ "$DEBUG_MODE" = "true" ]; then
+                log_info "Generating environment variables..."
+            fi
+            generate_env_vars "$env_file"
+            ;;
+        "all")
+            if [ "$DEBUG_MODE" = "true" ]; then
+                log_info "Generating local and environment variables..."
+            fi
+            generate_local_vars "$env_file"
+            generate_env_vars "$env_file"
+            ;;
+    esac
+    
+    log_ok "Generated $env_file successfully"
+}
+
+# Generate local/repository variables
+generate_local_vars() {
+    local env_file="$1"
+    
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_info "Starting generate_local_vars function"
+    fi
+    
+    # Filter variables by context (exclude install-only vars for runtime)
+    local repo_required_filtered=()
+    local repo_optional_filtered=()
+    local local_required_filtered=()
+    local local_optional_filtered=()
+    
+        # Filter required repository variables (exclude install-only)
+        for var in "${REQUIRED_VARS[@]}"; do
+            local var_context=$(get_schema_context "$var")
+            if [ "$var_context" != "install" ]; then
+                repo_required_filtered+=("$var")
+            fi
+        done
+        
+        # Filter optional repository variables (exclude install-only)
+        for var in "${OPTIONAL_VARS[@]}"; do
+            local var_context=$(get_schema_context "$var")
+            if [ "$var_context" != "install" ]; then
+                repo_optional_filtered+=("$var")
+            fi
+        done
+        
+        # Filter required local variables (exclude install-only)
+        for var in "${LOCAL_REQUIRED_VARS[@]}"; do
+            local var_context=$(get_schema_context "$var")
+            if [ "$var_context" != "install" ]; then
+                local_required_filtered+=("$var")
+            fi
+        done
+        
+        # Filter optional local variables (exclude install-only)
+        for var in "${LOCAL_OPTIONAL_VARS[@]}"; do
+            local var_context=$(get_schema_context "$var")
+            if [ "$var_context" != "install" ]; then
+                local_optional_filtered+=("$var")
+            fi
+        done
+    
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_info "Filtered repo required: ${#repo_required_filtered[@]} vars"
+        log_info "Filtered repo optional: ${#repo_optional_filtered[@]} vars"
+        log_info "Filtered local required: ${#local_required_filtered[@]} vars"
+        log_info "Filtered local optional: ${#local_optional_filtered[@]} vars"
+    fi
+    
+    echo "# Repository Variables" >> "$env_file"
+    
+    # Process required repository variables
+    for var in "${repo_required_filtered[@]}"; do
+        if [ "$DEBUG_MODE" = "true" ]; then
+            log_info "Processing repo required var: $var"
+        fi
+        prompt_for_variable "$var" "required" "$env_file"
+    done
+    
+    # Process optional repository variables
+    for var in "${repo_optional_filtered[@]}"; do
+        if [ "$DEBUG_MODE" = "true" ]; then
+            log_info "Processing repo optional var: $var"
+        fi
+        prompt_for_variable "$var" "optional" "$env_file"
+    done
+    
+    echo "" >> "$env_file"
+    echo "# Local Environment Variables" >> "$env_file"
+    
+    # Process required local variables
+    for var in "${local_required_filtered[@]}"; do
+        if [ "$DEBUG_MODE" = "true" ]; then
+            log_info "Processing local required var: $var"
+        fi
+        prompt_for_variable "$var" "required" "$env_file"
+    done
+    
+    # Process optional local variables
+    for var in "${local_optional_filtered[@]}"; do
+        if [ "$DEBUG_MODE" = "true" ]; then
+            log_info "Processing local optional var: $var"
+        fi
+        prompt_for_variable "$var" "optional" "$env_file"
+    done
+    
+    echo "" >> "$env_file"
+    
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_info "Completed generate_local_vars function"
+    fi
+}
+
+# Generate environment-specific variables
+generate_env_vars() {
+    local env_file="$1"
+    
+    # Get environments to setup
+    local environments
+    if [ "$SETUP_MODE" = "env" ]; then
+        # Ask for environments
+        log_ask "Enter environments to setup (comma-separated) [PROD]: "
+        read -r environments
+        environments=${environments:-PROD}
+        echo "ENVIRONMENTS=$environments" >> "$env_file"
+    else
+        # Use existing ENVIRONMENTS value (already set in local vars or .env.setup)
+        environments=$(get_env_var "" "ENVIRONMENTS" "$ENV_FILE")
+        environments=${environments:-PROD}
+        # Don't write ENVIRONMENTS again if it's already set
+    fi
+    
+    echo "" >> "$env_file"
+    
+    # Convert comma-separated to array
+    IFS=',' read -ra env_array <<< "$environments"
+    
+    for env in "${env_array[@]}"; do
+        env=$(echo "$env" | xargs)  # trim whitespace
+        echo "# $env Environment Variables" >> "$env_file"
+        
+        # Filter environment variables by context
+        local env_required_filtered=()
+        local env_optional_filtered=()
+        
+        # Filter required environment variables (all env vars are for deployment)
+        for var in "${ENV_REQUIRED_VARS[@]}"; do
+            env_required_filtered+=("$var")
+        done
+        
+        # Filter optional environment variables (all env vars are for deployment)
+        for var in "${ENV_OPTIONAL_VARS[@]}"; do
+            env_optional_filtered+=("$var")
+        done
+        
+        # Process required environment variables
+        for var in "${env_required_filtered[@]}"; do
+            prompt_for_variable "${env}_${var}" "required" "$env_file"
+        done
+        
+        # Process optional environment variables
+        for var in "${env_optional_filtered[@]}"; do
+            prompt_for_variable "${env}_${var}" "optional" "$env_file"
+        done
+        
+        echo "" >> "$env_file"
+    done
+}
+
+# Prompt user for a variable value and write to file
+prompt_for_variable() {
+    local var="$1"
+    local requirement="$2"  # required/optional
+    local env_file="$3"
+    
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_info "Processing variable: $var ($requirement)"
+    fi
+    
+    # Check if variable already exists in .env.setup
+    local existing_value=""
+    if [ -f ".env.setup" ]; then
+        existing_value=$(get_env_var "" "$var" ".env.setup" || echo "")
+    fi
+    
+    # Get schema default
+    local default_value=""
+    default_value=$(get_schema_default "$var" || echo "")
+    
+    # Use existing value if available, otherwise use schema default
+    local suggested_value="${existing_value:-$default_value}"
+    
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_info "  existing: '$existing_value', default: '$default_value', suggested: '$suggested_value'"
+    fi
+    
+    # Skip prompting if in silent mode and we have a value
+    if [ "$SILENT_FLAG" = "--silent" ] && [ -n "$suggested_value" ]; then
+        echo "$var=$suggested_value" >> "$env_file"
+        if [ "$DEBUG_MODE" = "true" ]; then
+            log_info "  → Set to: $suggested_value (silent mode)"
+        fi
+        return 0
+    fi
+    
+    # Skip prompting for optional variables in silent mode if no value
+    if [ "$SILENT_FLAG" = "--silent" ] && [ "$requirement" = "optional" ] && [ -z "$suggested_value" ]; then
+        if [ "$DEBUG_MODE" = "true" ]; then
+            log_info "  → Skipped (optional, no value, silent mode)"
+        fi
+        return 0
+    fi
+    
+    # For required variables in silent mode with no value, show error
+    if [ "$SILENT_FLAG" = "--silent" ] && [ "$requirement" = "required" ] && [ -z "$suggested_value" ]; then
+        log_error "Required variable $var has no value in .env.setup and no default"
+        return 1
+    fi
+    
+    # Check for placeholder values in all modes
+    if [ "$requirement" = "required" ] && [ -n "$suggested_value" ]; then
+        if [[ "$suggested_value" == *"your-"* ]] || [[ "$suggested_value" == *"example"* ]] || [[ "$suggested_value" == *"password1234"* ]] || [[ "$suggested_value" == *"yourdomain"* ]]; then
+            if [ "$SILENT_FLAG" = "--silent" ]; then
+                log_error "$var using placeholder '$suggested_value' in .env.setup"
+                return 1
+            else
+                log_warn "$var using placeholder '$suggested_value'. Please update."
+                suggested_value=""  # Clear placeholder so user is prompted
+            fi
+        fi
+    fi
+    
+    # Interactive prompt
+    local prompt_text="Enter $var"
+    if [ -n "$suggested_value" ]; then
+        prompt_text="$prompt_text [$suggested_value]"
+    fi
+    if [ "$requirement" = "optional" ]; then
+        prompt_text="$prompt_text (optional)"
+    fi
+    prompt_text="$prompt_text: "
+    
+    local user_input
+    log_ask "$prompt_text"
+    read -r user_input
+    
+    # Use suggested value if user didn't enter anything
+    local final_value="${user_input:-$suggested_value}"
+    
+    # Only write to file if we have a value (required vars must have a value)
+    if [ -n "$final_value" ]; then
+        echo "$var=$final_value" >> "$env_file"
+        if [ "$DEBUG_MODE" = "true" ]; then
+            log_info "  → Set to: $final_value"
+        fi
+    elif [ "$requirement" = "required" ]; then
+        log_error "Required variable $var cannot be empty"
+        prompt_for_variable "$var" "$requirement" "$env_file"  # Retry
+    else
+        if [ "$DEBUG_MODE" = "true" ]; then
+            log_info "  → Skipped (optional, no value)"
+        fi
+    fi
+    
+    return 0
+}
+
+check_gh_cli() {
+    if ! command -v gh >/dev/null 2>&1; then
+        log_error "GitHub CLI (gh) is not installed or not in your PATH. Please install it and rerun this script.\nIf gh is not installed, visit https://github.com/cli/cli#installation for installation instructions."
+        exit 1
+    fi
+}
+
+check_gh_auth() {
+    if ! gh auth status >/dev/null 2>&1; then
+        log_error "GitHub CLI (gh) is not authenticated. Please run 'gh auth login' to authenticate, and ensure you have access to the repository."
+        exit 1
+    fi
+}
+
+check_repo_access() {
+    if ! gh repo view "$REPO_FULL" >/dev/null 2>&1; then
+        log_error "Cannot access GitHub repository $REPO_FULL. Please check the repository name and your permissions."
+        exit 1
+    fi
+}
+
+setup_known_hosts() {
+    # Get SSH_HOST from environment-specific variable
+    local ssh_host_var="${ENV}_SSH_HOST"
+    SSH_HOST="${!ssh_host_var:-}"
+    
+    if [ -z "$SSH_HOST" ]; then
+        log_ask "Required value SSH_HOST (your SSH host) missing from .env. Enter your SSH_HOST (e.g. example.com): "
+        read -r SSH_HOST
+    fi
+    if [ -z "$SSH_HOST" ]; then
+        log_error "Required value SSH_HOST (your SSH host) missing from .env. Aborting."
+        exit 1
+    fi
+    KNOWN_HOSTS=$(ssh-keyscan "$SSH_HOST" 2>/dev/null)
+    if [ -z "$KNOWN_HOSTS" ]; then
+        log_error "Could not generate KNOWN_HOSTS for $SSH_HOST. Aborting."
+        exit 1
+    fi
+}
+
+summary() {
+    if [ "$DEBUG_MODE" = "true" ]; then
+        log_info "\nSummary of schema-driven upload:"
+        log_info "- Repository variables: ${#REQUIRED_VARS[@]} required + ${#OPTIONAL_VARS[@]} optional"
+        log_info "- Repository secrets: ${#REPO_SECRET_VARS[@]} variables"
+        log_info "- LOCAL environment: ${#LOCAL_REQUIRED_VARS[@]} required + ${#LOCAL_OPTIONAL_VARS[@]} optional variables"
+        log_info "- LOCAL secrets: ${#LOCAL_SECRET_VARS[@]} secret variables"
+        log_info "- $ENV environment: ${#ENV_REQUIRED_VARS[@]} required + ${#ENV_OPTIONAL_VARS[@]} optional variables"
+        log_info "- $ENV secrets: ${#ENV_SECRET_VARS[@]} secret variables"
+        log_info "- SSH_KEY: $SSH_KEY_PATH"
+        log_info "- KNOWN_HOSTS: (generated for $SSH_HOST)"
+    fi
+}
+
+upload_github_secrets_and_vars() {
+    ERRORS=0
+    LOCAL_ENV="LOCAL"  # Define LOCAL environment name as variable for easy changes
+    
+    # Initialize DEWIRE behavior flags if not already set
+    if [ -z "${DEWIRE_ALLOW_CUSTOM_VARS:-}" ]; then
+        parse_dewire_flags
+    fi
+    
+    # Global tracking arrays for summary
+    declare -A UPLOADED_VARIABLES
+    declare -A UPLOADED_SECRETS
+    declare -A SKIPPED_VARIABLES
+    
+    # Helper function to track variable status for debug summary
+    track_variable() {
+        local var="$1"
+        local scope="$2"
+        local status="$3"  # "uploaded", "unchanged", "empty"
+        
+        local key="$var ($scope)"
+        if [ "$status" = "uploaded" ]; then
+            UPLOADED_VARIABLES["$key"]="uploaded"
+        else
+            SKIPPED_VARIABLES["$key"]="$status"
+        fi
+    }
+    
+    # Helper function to track secret status for debug summary
+    track_secret() {
+        local var="$1"
+        local scope="$2"
+        local status="$3"  # "uploaded"
+        
+        UPLOADED_SECRETS["$var ($scope)"]="$status"
+    }
+    
+    # Helper function to print debug summary table
+    print_debug_table() {
+        local title="$1"
+        local -n items_ref=$2  # Reference to associative array
+        
+        echo
+        log_info "$title:"
+        printf "%-28s %s\n" "${title%s}" "Status"  # Remove trailing 's' for header
+        printf "%-28s %s\n" "$(printf '%.0s─' {1..28})" "$(printf '%.0s─' {1..28})"
+        
+        for item in "${!items_ref[@]}"; do
+            local status="${items_ref[$item]}"
+            case "$status" in
+                "uploaded") printf "%-28s %s\n" "$item" "${SYM_OK} uploaded" ;;
+                "unchanged") printf "%-28s %s\n" "$item" "${SYM_NOT_SET} unchanged" ;;
+                "empty") printf "%-28s %s\n" "$item" "${SYM_WARNING} empty" ;;
+            esac
+        done
+    }
+    
+    # Helper function to download all current variables for an environment/repo
+    download_current_variables() {
+        local scope="$1"  # "repo" or environment name
+        local output
+        
+        if [ "$scope" = "repo" ]; then
+            output=$(gh variable list --repo "$REPO_FULL" --json name,value 2>/dev/null || echo "[]")
+        else
+            output=$(gh variable list --env "$scope" --repo "$REPO_FULL" --json name,value 2>/dev/null || echo "[]")
+        fi
+        echo "$output"
+    }
+    
+    # Helper function to check if variable is defined in schema
+    is_schema_variable() {
+        local var="$1"
+        local context="${2:-}"  # optional context filter
+        
+        # Check if variable exists in any schema array
+        for schema_var in "${REQUIRED_VARS[@]}" "${OPTIONAL_VARS[@]}" "${LOCAL_REQUIRED_VARS[@]}" "${LOCAL_OPTIONAL_VARS[@]}" "${ENV_REQUIRED_VARS[@]}" "${ENV_OPTIONAL_VARS[@]}"; do
+            if [ "$var" = "$schema_var" ]; then
+                # If context is specified, check if variable has that context
+                if [ -n "$context" ]; then
+                    return $(has_context "$var" "$context"; echo $?)
+                fi
+                return 0
+            fi
+        done
+        return 1
+    }
+    
+    # Helper function to get all variables from .env (both schema and custom)
+    get_all_env_variables() {
+        local scope="$1"  # "repo", "local", or environment name
+        local variables=()
+        
+        if [ ! -f "$ENV_FILE" ]; then
+            return
+        fi
+        
+        case "$scope" in
+            "repo")
+                # Repository variables (no prefix, not excluded)
+                variables+=($(grep -E '^[A-Z_]+=.*' "$ENV_FILE" | grep -v '^DEWIRE_' | grep -vE '^[A-Z_]+_[A-Z_]+=' | cut -d'=' -f1))
+                ;;
+            "local")
+                # LOCAL environment variables (no prefix but in LOCAL context)
+                variables+=($(grep -E '^[A-Z_]+=.*' "$ENV_FILE" | grep -v '^DEWIRE_' | grep -vE '^[A-Z_]+_[A-Z_]+=' | cut -d'=' -f1))
+                ;;
+            *)
+                # Environment-specific variables (with env prefix)
+                variables+=($(grep -E "^${scope}_[A-Z_]+=.*" "$ENV_FILE" | cut -d'=' -f1 | sed "s/^${scope}_//"))
+                ;;
+        esac
+        
+        printf '%s\n' "${variables[@]}"
+    }
+    
+    # Helper function to handle custom (non-schema) variables
+    handle_custom_variables() {
+        local scope="$1"
+        local all_vars=()
+        
+        # Get all variables from .env for this scope
+        mapfile -t all_vars < <(get_all_env_variables "$scope")
+        
+        local custom_vars=()
+        for var in "${all_vars[@]}"; do
+            if ! is_schema_variable "$var"; then
+                custom_vars+=("$var")
+            fi
+        done
+        
+        # Handle custom variables based on DEWIRE flags
+        for var in "${custom_vars[@]}"; do
+            if [ "$DEWIRE_ALLOW_CUSTOM_VARS" = "false" ]; then
+                # Skip custom variables
+                if [ "$DEBUG_MODE" = "true" ]; then
+                    log_info "Skipping custom variable: $var"
+                fi
+                continue
+            fi
+            
+            if [ "$DEWIRE_ASK_ON_CUSTOM_VARS" = "true" ] && [ "$DONTASKME_FLAG" = "false" ] && [ "$SILENT_FLAG" != "--silent" ]; then
+                # Ask user about custom variable
+                log_ask "Upload custom variable $var? [y/N]: "
+                read -r response
+                response=${response:-n}
+                if [[ ! $response =~ ^[Yy]$ ]]; then
+                    continue
+                fi
+            fi
+            
+            # Add to upload list
+            case "$scope" in
+                "repo")
+                    REQUIRED_VARS+=("$var")
+                    ;;
+                "local")
+                    LOCAL_REQUIRED_VARS+=("$var")
+                    ;;
+                *)
+                    ENV_REQUIRED_VARS+=("$var")
+                    ;;
+            esac
+        done
+    }
+
+    # Helper function to batch upload variables with summary
+    batch_upload_variables() {
+        local scope="$1"        # "repo" or environment name  
+        local vars_array_name="$2"  # Name of array containing variables to upload
+        local description="$3"   # Description for logging
+        
+        # Get reference to the array
+        local -n vars_array=$vars_array_name
+        
+        # Handle custom variables for this scope
+        if [ "$DONTASKME_FLAG" = "false" ]; then
+            case "$scope" in
+                "repo"|"$LOCAL_ENV")
+                    handle_custom_variables "$scope"
+                    ;;
+                *)
+                    handle_custom_variables "$scope"
+                    ;;
+            esac
+        fi
+        
+        # Download current variables
+        local current_vars
+        current_vars=$(download_current_variables "$scope")
+        
+        # Build associative array of current values
+        declare -A current_values
+        if command -v jq >/dev/null 2>&1; then
+            while IFS='=' read -r name value; do
+                [[ -n "$name" ]] && current_values["$name"]="$value"
+            done < <(echo "$current_vars" | jq -r '.[] | "\(.name)=\(.value)"' 2>/dev/null || true)
+        else
+            log_error "jq is required but not installed"
+            ERRORS=$((ERRORS + 1))
+            return 1
+        fi
+        
+        local changed=0
+        local skipped=0
+        local empty=0
+        local changed_vars=()
+        local upload_results=()
+        
+        # Process each variable
+        for var in "${vars_array[@]}"; do
+            # Skip variables with install context (not for GitHub upload)
+            local var_context=$(get_schema_context "$var")
+            if [ "$var_context" = "install" ]; then
+                continue
+            fi
+            
+            local value=""
+            # Safely get environment variable value
+            if [ "$scope" = "repo" ]; then
+                value=$(get_env_var "" "$var" "$ENV_FILE" 2>/dev/null || echo "")
+            elif [ "$scope" = "$LOCAL_ENV" ]; then
+                value=$(get_env_var "" "$var" "$ENV_FILE" 2>/dev/null || echo "")
+            else
+                # Environment-specific variable
+                local env_var="${scope}_${var}"
+                value=$(get_env_var "" "$env_var" "$ENV_FILE" 2>/dev/null || echo "")
+            fi
+            
+            if [ -n "$value" ]; then
+                local current_value="${current_values[$var]:-}"
+                
+                if [ "$current_value" = "$value" ]; then
+                    skipped=$((skipped + 1))
+                    upload_results+=("$var:unchanged")
+                    track_variable "$var" "$scope" "unchanged"
+                else
+                    local upload_cmd
+                    if [ "$scope" = "repo" ]; then
+                        upload_cmd="gh variable set '$var' --body '$value' --repo '$REPO_FULL'"
+                    else
+                        upload_cmd="gh variable set '$var' --env '$scope' --body '$value' --repo '$REPO_FULL'"
+                    fi
+                    
+                    if eval "$upload_cmd" >/dev/null 2>&1; then
+                        changed=$((changed + 1))
+                        changed_vars+=("$var")
+                        upload_results+=("$var:updated")
+                        track_variable "$var" "$scope" "uploaded"
+                    else
+                        log_error "Failed to set $scope variable $var"
+                        upload_results+=("$var:failed")
+                        ERRORS=$((ERRORS + 1))
+                    fi
+                fi
+            else
+                empty=$((empty + 1))
+                upload_results+=("$var:empty")
+                track_variable "$var" "$scope" "empty"
+            fi
+        done
+        
+        # Print summary - only show if something interesting happened
+        local summary_parts=()
+        [ $changed -gt 0 ] && summary_parts+=("$changed variables uploaded")
+        [ $skipped -gt 0 ] && summary_parts+=("$skipped unchanged")
+        [ $empty -gt 0 ] && summary_parts+=("$empty empty")
+        
+        if [ ${#summary_parts[@]} -gt 0 ]; then
+            local summary=$(IFS=', '; echo "${summary_parts[*]}")
+            if [ $changed -gt 0 ]; then
+                log_ok "$summary"
+            elif [ $skipped -gt 0 ] || [ $empty -gt 0 ]; then
+                # Use symbol for unchanged/empty without logging individual items
+                if [ $skipped -gt 0 ] && [ $empty -gt 0 ]; then
+                    log_info "${SYM_NOT_SET} $skipped unchanged, $empty empty variables"
+                elif [ $skipped -gt 0 ]; then
+                    log_info "${SYM_NOT_SET} $skipped unchanged variables"
+                elif [ $empty -gt 0 ]; then
+                    log_info "${SYM_WARNING} $empty empty variables"
+                fi
+            fi
+        fi
+    }
+    
+    # Helper function to upload secret (repo or environment)
+    upload_secret() {
+        local var="$1"
+        local value="$2"
+        local env="${3:-repo}"  # Default to repo if no env specified
+        
+        local cmd
+        local scope_label
+        if [ "$env" = "repo" ]; then
+            cmd="gh secret set '$var' --body '$value' --repo '$REPO_FULL'"
+            scope_label="repository"
+        else
+            cmd="gh secret set '$var' --env '$env' --body '$value' --repo '$REPO_FULL'"
+            scope_label="$env"
+        fi
+        
+        if eval "$cmd" >/dev/null 2>&1; then
+            track_secret "$var" "$env" "uploaded"
+            return 0
+        else
+            log_error "Failed to set $scope_label secret $var"
+            ERRORS=$((ERRORS + 1))
+            return 1
+        fi
+    }
+    
+    log_info "\nUploading repository variables to GitHub..."
+    
+    # Create array for repository variables
+    repo_vars=("${REQUIRED_VARS[@]}" "${OPTIONAL_VARS[@]}")
+    if [ ${#repo_vars[@]} -gt 0 ]; then
+        batch_upload_variables "repo" repo_vars "repository variables"
+    fi
+    
+    # Upload repository-level secrets (marked with @) - always overwrite
+    local secret_count=0
+    for var in "${REPO_SECRET_VARS[@]}"; do
+        local value=$(get_env_var "" "$var" "$ENV_FILE")
+        if [ -n "$value" ]; then
+            upload_secret "$var" "$value" "repo" && secret_count=$((secret_count + 1))
+        fi
+    done
+    [ $secret_count -gt 0 ] && log_ok "$secret_count secret uploaded" || [ $secret_count -eq 0 ] && [ "$DEBUG_MODE" = "true" ] && log_info "${SYM_NOT_SET} No repository secrets to upload"
+    
+    # Ensure GitHub environments exist
+    create_environment() {
+        local env_name="$1"
+        local api_url="/repos/$REPO_OWNER/$REPO_NAME/environments/$env_name"
+        
+        if gh api --method PUT -H "Accept: application/vnd.github+json" "$api_url" >/dev/null 2>&1; then
+            [ "$DEBUG_MODE" = "true" ] && log_ok "Environment '$env_name' ensured on GitHub."
+            return 0
+        else
+            log_error "Failed to create or access environment '$env_name' on GitHub."
+            return 1
+        fi
+    }
+    
+    # Create environments
+    create_environment "$LOCAL_ENV" || ERRORS=$((ERRORS + 1))
+    create_environment "$ENV" || ERRORS=$((ERRORS + 1))
+    
+    log_info "\nUploading LOCAL environment variables to GitHub environment '$LOCAL_ENV'..."
+    
+    # Upload LOCAL environment variables (marked with +) using batch processing
+    if [ ${#LOCAL_REQUIRED_VARS[@]} -gt 0 ] || [ ${#LOCAL_OPTIONAL_VARS[@]} -gt 0 ]; then
+        local_vars=("${LOCAL_REQUIRED_VARS[@]}" "${LOCAL_OPTIONAL_VARS[@]}")
+        batch_upload_variables "$LOCAL_ENV" local_vars "LOCAL variables"
+    else
+        log_info "No LOCAL variables to upload"
+    fi
+    
+    # Upload LOCAL environment secrets (marked with +@) - always overwrite
+    local local_secret_count=0
+    for var in "${LOCAL_SECRET_VARS[@]}"; do
+        local value=$(get_env_var "" "$var" "$ENV_FILE")
+        if [ -n "$value" ]; then
+            upload_secret "$var" "$value" "$LOCAL_ENV" && local_secret_count=$((local_secret_count + 1))
+        fi
+    done
+    [ $local_secret_count -gt 0 ] && log_ok "$local_secret_count secrets uploaded"
+    
+    log_info "\nUploading $ENV environment variables to GitHub environment '$ENV'..."
+    
+    # Upload environment-specific variables using batch processing
+    env_vars=("${ENV_REQUIRED_VARS[@]}" "${ENV_OPTIONAL_VARS[@]}")
+    if [ ${#env_vars[@]} -gt 0 ]; then
+        batch_upload_variables "$ENV" env_vars "$ENV variables"
+    fi
+    
+    # Upload environment-specific secrets - always overwrite
+    local env_secret_count=0
+    for var in "${ENV_SECRET_VARS[@]}"; do
+        local env_var="${ENV}_${var}"
+        local value=$(get_env_var "" "$env_var" "$ENV_FILE")
+        if [ -n "$value" ]; then
+            upload_secret "$var" "$value" "$ENV" && env_secret_count=$((env_secret_count + 1))
+        fi
+    done
+    
+    # Add SSH key handling (special case)
+    if [ -f "$SSH_KEY_PATH" ]; then
+        SSH_KEY_CONTENT=$(cat "$SSH_KEY_PATH")
+        upload_secret "SSH_KEY" "$SSH_KEY_CONTENT" "$ENV" && env_secret_count=$((env_secret_count + 1))
+    fi
+    
+    [ $env_secret_count -gt 0 ] && log_ok "$env_secret_count secrets uploaded"
+    
+    # Add KNOWN_HOSTS (special case variable)
+    if [ -n "$KNOWN_HOSTS" ]; then
+        # Handle KNOWN_HOSTS upload
+        upload_known_hosts() {
+            local current_vars
+            current_vars=$(download_current_variables "$ENV")
+            
+            declare -A current_values
+            if command -v jq >/dev/null 2>&1; then
+                while IFS='=' read -r name value; do
+                    [[ -n "$name" ]] && current_values["$name"]="$value"
+                done < <(echo "$current_vars" | jq -r '.[] | "\(.name)=\(.value)"' 2>/dev/null || true)
+            fi
+            
+            local current_value="${current_values[KNOWN_HOSTS]:-}"
+            if [ "$current_value" = "$KNOWN_HOSTS" ]; then
+                [ "$DEBUG_MODE" = "true" ] && log_info "${SYM_NOT_SET} KNOWN_HOSTS unchanged"
+                track_variable "KNOWN_HOSTS" "$ENV" "unchanged"
+            else
+                if gh variable set "KNOWN_HOSTS" --env "$ENV" --body "$KNOWN_HOSTS" --repo "$REPO_FULL" >/dev/null 2>&1; then
+                    log_ok "KNOWN_HOSTS updated"
+                    track_variable "KNOWN_HOSTS" "$ENV" "uploaded"
+                else
+                    log_error "Failed to set KNOWN_HOSTS"
+                    ERRORS=$((ERRORS + 1))
+                fi
+            fi
+        }
+        upload_known_hosts
+    fi
+    
+    if [ $ERRORS -eq 0 ]; then
+        # log_ok "Environment variables and secrets upload complete."
+        
+        # Show debug summary table
+        if [ "$DEBUG_MODE" = "true" ]; then
+            echo
+            log_info "Upload Summary:"
+            
+            # Variables summary
+            if [ ${#UPLOADED_VARIABLES[@]} -gt 0 ] || [ ${#SKIPPED_VARIABLES[@]} -gt 0 ]; then
+                # Combine uploaded and skipped variables for unified display
+                declare -A all_variables
+                for var in "${!UPLOADED_VARIABLES[@]}"; do
+                    all_variables["$var"]="uploaded"
+                done
+                for var in "${!SKIPPED_VARIABLES[@]}"; do
+                    all_variables["$var"]="${SKIPPED_VARIABLES[$var]}"
+                done
+                print_debug_table "Variables" all_variables
+            fi
+            
+            # Secrets summary  
+            if [ ${#UPLOADED_SECRETS[@]} -gt 0 ]; then
+                print_debug_table "Secrets" UPLOADED_SECRETS
+            fi
+        fi
+    else
+        log_error "Environment variables and secrets upload completed with $ERRORS error(s)."
+        exit 1
+    fi
+}
+
+main "$@"

@@ -62,7 +62,11 @@ ENV_SECRET_VARS=()
 EXCLUDED_VARS=()
 ENV_EXCLUDED_VARS=()
 
-# Parse .env.schema and populate required/optional arrays
+# Global associative arrays for schema metadata (defaults, contexts)
+declare -A SCHEMA_DEFAULTS=()
+declare -A SCHEMA_CONTEXTS=()
+
+# Parse .env.schema and populate required/optional arrays with enhanced format support
 parse_env_schema() {
     local silent_mode="${1:-false}"
     local schema_file="$(dirname "$0")/lib/.env.schema"
@@ -83,6 +87,10 @@ parse_env_schema() {
     ENV_SECRET_VARS=()
     EXCLUDED_VARS=()
     ENV_EXCLUDED_VARS=()
+    
+    # Clear associative arrays
+    SCHEMA_DEFAULTS=()
+    SCHEMA_CONTEXTS=()
     
     # Helper function to add variable to appropriate array
     add_to_array() {
@@ -130,13 +138,38 @@ parse_env_schema() {
         esac
     }
     
-    while IFS=':' read -r var status; do
+    # Parse schema lines with enhanced format: VAR|required/optional|default=value|context=install/runtime/env
+    while IFS= read -r line; do
         # Skip comments and empty lines
-        [[ "$var" =~ ^#.*$ ]] && continue
-        [[ -z "$var" ]] && continue
+        [[ "$line" =~ ^#.*$ ]] && continue
+        [[ -z "$line" ]] && continue
+        
+        # Parse schema line: VAR|status|default|context
+        IFS='|' read -r var status default_part context_part <<< "$line"
+        
+        # Skip if we don't have at least var and status
+        [[ -z "$var" || -z "$status" ]] && continue
         
         local clean_var="$var"
         local var_type="repo"  # Default: repository variable
+        
+        # Parse default value (default=value or empty)
+        local default_value=""
+        if [[ "$default_part" =~ ^default=(.*)$ ]]; then
+            default_value="${BASH_REMATCH[1]}"
+        elif [[ -n "$default_part" && "$default_part" != "" ]]; then
+            # Handle case where default is specified without prefix
+            default_value="$default_part"
+        fi
+        
+        # Parse context (context=install/runtime/env or empty)
+        local context_value=""
+        if [[ "$context_part" =~ ^context=(.*)$ ]]; then
+            context_value="${BASH_REMATCH[1]}"
+        elif [[ -n "$context_part" && "$context_part" != "" ]]; then
+            # Handle case where context is specified without prefix
+            context_value="$context_part"
+        fi
         
         # Handle exclusion prefix !
         if [[ "$var" =~ ^!(.+)$ ]]; then
@@ -171,12 +204,114 @@ parse_env_schema() {
             fi
         fi
         
+        # Store metadata
+        if [ -n "$default_value" ]; then
+            SCHEMA_DEFAULTS["$clean_var"]="$default_value"
+        fi
+        if [ -n "$context_value" ]; then
+            SCHEMA_CONTEXTS["$clean_var"]="$context_value"
+        fi
+        
         add_to_array "$clean_var" "$status" "$var_type"
     done < "$schema_file"
     
     if [ "$silent_mode" = "false" ]; then
         log_ok ".env schema parsed successfully"
     fi
+}
+
+# Helper functions for schema metadata
+get_schema_default() {
+    local var="$1"
+    
+    # Check direct match first
+    if [[ -n "${SCHEMA_DEFAULTS[$var]:-}" ]]; then
+        echo "${SCHEMA_DEFAULTS[$var]}"
+        return
+    fi
+    
+    # Check if this is an environment-specific variable (ENV_VAR format)
+    if [[ "$var" =~ ^[A-Z]+_(.+)$ ]]; then
+        local base_var="${BASH_REMATCH[1]}"
+        if [[ -n "${SCHEMA_DEFAULTS[$base_var]:-}" ]]; then
+            echo "${SCHEMA_DEFAULTS[$base_var]}"
+            return
+        fi
+    fi
+    
+    echo ""
+}
+
+get_schema_context() {
+    local var="$1"
+    
+    # Check if explicit context is specified in schema
+    if [[ -n "${SCHEMA_CONTEXTS[$var]:-}" ]]; then
+        echo "${SCHEMA_CONTEXTS[$var]}"
+        return
+    fi
+    
+    # Check if this is an environment-specific variable (ENV_VAR format)
+    if [[ "$var" =~ ^[A-Z]+_(.+)$ ]]; then
+        local base_var="${BASH_REMATCH[1]}"
+        if [[ -n "${SCHEMA_CONTEXTS[$base_var]:-}" ]]; then
+            echo "${SCHEMA_CONTEXTS[$base_var]}"
+            return
+        fi
+        # If no explicit context, infer from environment prefix
+        echo "env"
+        return
+    fi
+    
+    # Default to runtime for variables without explicit context
+    echo "runtime"
+}
+
+# Check if variable has specific context
+has_context() {
+    local var="$1"
+    local context="$2"
+    local var_context=$(get_schema_context "$var")
+    [[ "$var_context" == "$context" ]]
+}
+
+# Get inferred context based on variable prefix/type
+get_inferred_context() {
+    local var="$1"
+    local var_type="$2"  # from parsing (repo, local, env, excluded, etc.)
+    
+    case "$var_type" in
+        "excluded"|"env_excluded")
+            echo "install"
+            ;;
+        "env"|"env_secret")
+            echo "env"
+            ;;
+        *)
+            echo "runtime"
+            ;;
+    esac
+}
+
+# Filter variables by context
+filter_vars_by_context() {
+    local context="$1"
+    shift
+    local vars=("$@")
+    local filtered=()
+    
+    for var in "${vars[@]}"; do
+        local var_context=$(get_schema_context "$var")
+        # Include variable if:
+        # 1. It has the specified context, OR
+        # 2. It has no context (defaults to all contexts), OR  
+        # 3. It has runtime context (which applies to most cases)
+        if [ "$var_context" = "$context" ] || [ -z "$var_context" ] || [ "$var_context" = "runtime" ]; then
+            filtered+=("$var")
+        fi
+    done
+    
+    printf '%s\n' "${filtered[@]}"
 }
 
 # Check if variable contains placeholder values
@@ -384,8 +519,8 @@ validate_and_load_env() {
         debug_mode="true"
     fi
 
-    # Check for silent flag (only check global SILENT_FLAG)
-    if [ "$SILENT_FLAG" = "--silent" ]; then
+    # Check for silent flag (use SILENT_FLAG if set, otherwise default to false)
+    if [ "${SILENT_FLAG:-}" = "--silent" ]; then
         silent_mode="true"
     fi
 
