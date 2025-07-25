@@ -8,6 +8,13 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(dirname "$0")"
 source "${SCRIPT_DIR}/lib/common.sh"
 
+# Import the new libraries
+source "${SCRIPT_DIR}/lib/schema-parser.sh"
+source "${SCRIPT_DIR}/lib/env-validator.sh"
+source "${SCRIPT_DIR}/lib/env-wizard.sh"
+source "${SCRIPT_DIR}/lib/github-uploader.sh"
+source "${SCRIPT_DIR}/lib/env-loader-simple.sh"
+
 # Global flags
 DEBUG=false
 DONTASKME=false
@@ -22,7 +29,66 @@ Usage: ddev dw-gh-env [ENV] [--debug] [--dontaskme]
 Options:
   --debug      Show detailed debug information
   --dontaskme  Skip all prompts, only upload schema-defined vars
+  --dry-run    Skip GitHub upload (for testing)
 EOF
+}
+
+main() {
+  export NO_COLOR=1
+  
+  parse_args "$@"
+  
+  if [[ ! -f ".env" ]]; then
+    wizard_mode
+  else
+    # Parse schema first to populate variable arrays
+    debug "Parsing schema for existing .env file"
+    parse_env_schema false
+    
+    # Check if .env file is incomplete and fix if needed
+    debug "Checking if .env file is complete"
+    if ! is_env_complete ".env"; then
+      debug ".env file is incomplete - starting fix process"
+      log_info "Incomplete .env file detected. Fixing missing variables..."
+      
+      # Determine setup mode based on existing variables or prompt user
+      if [[ -z "${SETUP_MODE:-}" ]]; then
+        determine_setup_mode ".env"
+      fi
+      debug "Using setup mode: $SETUP_MODE"
+      
+      # Always re-parse schema with the determined mode
+      debug "Re-parsing schema for mode: $SETUP_MODE"
+      parse_env_schema false
+      
+      fix_incomplete_env ".env"
+      log_ok "Variables fixed. Proceeding with environment loading..."
+    else
+      debug ".env file is complete"
+    fi
+    
+    # Now load the environment (with validation)
+    # For GitHub setup, use the first environment if none specified
+    local env_arg="${PARSED_ARGS[0]:-}"
+    if [[ -z "$env_arg" ]]; then
+      local environments
+      if environments=$(get_env_environments ".env"); then
+        if [[ -n "$environments" ]]; then
+          # Use the first environment as default
+          env_arg=$(echo "$environments" | cut -d' ' -f1 | tr -d '"')
+          debug "Auto-selecting environment: $env_arg"
+        fi
+      fi
+    fi
+    load_environment "$env_arg"
+  fi
+  
+  # Upload to GitHub
+  if [[ "${DRY_RUN:-false}" == true ]]; then
+    log_ok "Dry run mode - skipping GitHub upload"
+  else
+    upload_github_data
+  fi
 }
 
 parse_args() {
@@ -31,147 +97,17 @@ parse_args() {
       --help) show_help; exit 0 ;;
       --debug) DEBUG=true ;;
       --dontaskme) DONTASKME=true ;;
+      --dry-run) DRY_RUN=true ;;
       -*) log_error "Unknown option: $1"; exit 1 ;;
       *) PARSED_ARGS+=("$1") ;;
     esac
     shift
   done
-  export DEBUG DONTASKME
+  export DEBUG DONTASKME DRY_RUN
 }
 
 debug() {
   [[ "$DEBUG" == true ]] && log_info "$*" || true
-}
-
-has_placeholder() {
-  local value="$1"
-  [[ "$value" == *"your-"* || "$value" == *"example"* || "$value" == *"password1234"* || "$value" == *"yourdomain"* || "$value" == *"/your/"* ]]
-}
-
-prompt_variable() {
-  local var="$1" requirement="$2" env_file="$3"
-  local existing="" default="" suggested=""
-  
-  # Only use .env.setup values if WIZARD_MODE is not set (i.e., we're updating an existing setup)
-  # For fresh installations (wizard mode), use only schema defaults
-  if [[ -z "${WIZARD_MODE:-}" && -f ".env.setup" ]]; then
-    existing=$(get_env_var "" "$var" ".env.setup" 2>/dev/null || echo "")
-  fi
-  
-  default=$(get_schema_default "$var" 2>/dev/null || echo "")
-  suggested="${existing:-$default}"
-  
-  debug "Processing $var: existing='$existing', default='$default', suggested='$suggested'"
-  
-  # Handle placeholder values
-  if [[ -n "$suggested" ]] && has_placeholder "$suggested"; then
-    log_warn "Variable $var has placeholder value - please provide real value"
-    suggested=""
-  fi
-  
-  # Interactive prompt
-  local prompt="Enter $var"
-  [[ -n "$suggested" ]] && prompt="$prompt [$suggested]"
-  [[ "$requirement" == "optional" ]] && prompt="$prompt (optional)"
-  prompt="$prompt: "
-  
-  local user_input
-  log_ask "$prompt"
-  read -r user_input
-  
-  local final_value="${user_input:-$suggested}"
-  
-  if [[ -n "$final_value" ]]; then
-    echo "$var=$final_value" >> "$env_file"
-    debug "Set $var=$final_value"
-  elif [[ "$requirement" == "required" ]]; then
-    log_error "Required variable $var cannot be empty"
-    prompt_variable "$var" "$requirement" "$env_file"
-  fi
-}
-
-choose_setup_mode() {
-  # Check for mode flags
-  for arg in "${PARSED_ARGS[@]}"; do
-    case "$arg" in
-      -a) SETUP_MODE="all"; return 0 ;;
-      -l) SETUP_MODE="local"; return 0 ;;
-      -e) SETUP_MODE="env"; return 0 ;;
-    esac
-  done
-  
-  log_info "Setup mode:"
-  log_option 1 "Local environment only"
-  log_option 2 "Deployment environments" 
-  log_option 3 "All (local + environments)"
-  
-  local selection
-  while true; do
-    log_ask "Select mode [3]: "
-    read -r selection
-    case "${selection:-3}" in
-      1) SETUP_MODE="local"; break ;;
-      2) SETUP_MODE="env"; break ;;
-      3) SETUP_MODE="all"; break ;;
-      *) log_warn "Invalid selection. Choose 1, 2, or 3." ;;
-    esac
-  done
-}
-
-generate_env() {
-  local env_file=".env"
-  WIZARD_MODE=true  # Flag to indicate we're in wizard mode (fresh installation)
-  debug "Generating $env_file (mode: $SETUP_MODE)"
-  
-  cat > "$env_file" << 'EOF'
-# DeWire Environment Configuration
-# Generated by dw-gh-env wizard
-
-# DeWire behavior flags
-DEWIRE_ALLOW_CUSTOM_VARS=true
-DEWIRE_ASK_ON_CUSTOM_VARS=true
-
-EOF
-  
-  case "$SETUP_MODE" in
-    local|all)
-      echo "# Local Environment Variables" >> "$env_file"
-      for var in "${LOCAL_REQUIRED_VARS[@]}"; do
-        # Skip ENVIRONMENTS - it's handled specially in environment setup
-        [[ "$var" == "ENVIRONMENTS" ]] && continue
-        prompt_variable "$var" "required" "$env_file"
-      done
-      
-      echo -e "\n# Repository Variables" >> "$env_file"
-      for var in "${REQUIRED_VARS[@]}"; do
-        prompt_variable "$var" "required" "$env_file"
-      done
-      ;;& # fallthrough
-    env|all)
-      if [[ "$SETUP_MODE" == "env" ]] || [[ "$SETUP_MODE" == "all" ]]; then
-        # Ask for environment name(s) first - this replaces ENVIRONMENTS prompting
-        log_ask "Enter environment name(s) [PROD]: "
-        read -r environments
-        environments="${environments:-PROD}"
-        echo -e "\nENVIRONMENTS=$environments" >> "$env_file"
-      fi
-      
-      echo "" >> "$env_file"
-      IFS=' ' read -ra env_array <<< "$environments"
-      
-      for env in "${env_array[@]}"; do
-        env=$(echo "$env" | xargs | tr -d '"')
-        echo "# $env Environment Variables" >> "$env_file"
-        
-        for var in "${ENV_REQUIRED_VARS[@]}"; do
-          prompt_variable "${env}_${var}" "required" "$env_file"
-        done
-        echo "" >> "$env_file"
-      done
-      ;;
-  esac
-  
-  log_ok "Generated $env_file"
 }
 
 wizard_mode() {
@@ -187,154 +123,17 @@ wizard_mode() {
   fi
   
   # Parse DEWIRE flags
-  DEWIRE_ALLOW_CUSTOM_VARS=$(get_env_var "" "DEWIRE_ALLOW_CUSTOM_VARS" "${ENV_FILE:-}" 2>/dev/null || echo "true")
-  DEWIRE_ASK_ON_CUSTOM_VARS=$(get_env_var "" "DEWIRE_ASK_ON_CUSTOM_VARS" "${ENV_FILE:-}" 2>/dev/null || echo "true")
+  local dewire_allow dewire_ask
+  dewire_allow=$(get_env_var "" "DEWIRE_ALLOW_CUSTOM_VARS" "${ENV_FILE:-}" 2>/dev/null || echo "true")
+  dewire_ask=$(get_env_var "" "DEWIRE_ASK_ON_CUSTOM_VARS" "${ENV_FILE:-}" 2>/dev/null || echo "true")
+  export DEWIRE_ALLOW_CUSTOM_VARS="$dewire_allow"
+  export DEWIRE_ASK_ON_CUSTOM_VARS="$dewire_ask"
   
-  choose_setup_mode
+  choose_setup_mode "${PARSED_ARGS[@]}"
   generate_env
   
   ENV_FILE=".env"
-  validate_and_load_env "${PARSED_ARGS[0]:-}"
-}
-
-upload_secret() {
-  local var="$1" value="$2" scope="${3:-repo}"
-  local cmd
-  
-  if [[ "$scope" == "repo" ]]; then
-    cmd="gh secret set '$var' --body '$value' --repo '$REPO_FULL'"
-  else
-    cmd="gh secret set '$var' --env '$scope' --body '$value' --repo '$REPO_FULL'"
-  fi
-  
-  if eval "$cmd" >/dev/null 2>&1; then
-    debug "Uploaded secret: $var ($scope)"
-    return 0
-  else
-    log_error "Failed to upload secret: $var"
-    return 1
-  fi
-}
-
-upload_variables() {
-  local scope="$1"
-  shift
-  local vars=("$@")
-  local changed=0 errors=0
-  
-  debug "Uploading variables to $scope: ${vars[*]}"
-  
-  for var in "${vars[@]}"; do
-    local value
-    if [[ "$scope" == "repo" ]]; then
-      value=$(get_env_var "" "$var" "$ENV_FILE" 2>/dev/null || echo "")
-    else
-      value=$(get_env_var "" "${scope}_${var}" "$ENV_FILE" 2>/dev/null || echo "")
-    fi
-    
-    if [[ -n "$value" ]]; then
-      local cmd
-      if [[ "$scope" == "repo" ]]; then
-        cmd="gh variable set '$var' --body '$value' --repo '$REPO_FULL'"
-      else
-        cmd="gh variable set '$var' --env '$scope' --body '$value' --repo '$REPO_FULL'"
-      fi
-      
-      if eval "$cmd" >/dev/null 2>&1; then
-        ((changed++))
-        debug "Uploaded: $var"
-      else
-        log_error "Failed to upload: $var"
-        ((errors++))
-      fi
-    fi
-  done
-  
-  [[ $changed -gt 0 ]] && log_ok "$changed variables uploaded to $scope"
-  [[ $errors -gt 0 ]] && log_error "$errors upload failures"
-  
-  return $errors
-}
-
-upload_github_data() {
-  local errors=0
-  
-  log_info "Uploading to GitHub..."
-  
-  # Repository variables
-  upload_variables "repo" "${REQUIRED_VARS[@]}" "${OPTIONAL_VARS[@]}" || ((errors++))
-  
-  # Repository secrets
-  for var in "${REPO_SECRET_VARS[@]}"; do
-    local value=$(get_env_var "" "$var" "$ENV_FILE" 2>/dev/null || echo "")
-    [[ -n "$value" ]] && upload_secret "$var" "$value" "repo" || ((errors++))
-  done
-  
-  # Environment-specific data
-  local environments=$(get_env_var "" "ENVIRONMENTS" "$ENV_FILE" 2>/dev/null || echo "")
-  environments=$(echo "$environments" | sed 's/[",]/ /g' | xargs)
-  
-  for env in LOCAL $environments; do
-    # Create environment
-    gh api --method PUT -H "Accept: application/vnd.github+json" "/repos/$REPO_OWNER/$REPO_NAME/environments/$env" >/dev/null 2>&1 || true
-    
-    # Upload variables
-    if [[ "$env" == "LOCAL" ]]; then
-      upload_variables "$env" "${LOCAL_REQUIRED_VARS[@]}" "${LOCAL_OPTIONAL_VARS[@]}" || ((errors++))
-      
-      for var in "${LOCAL_SECRET_VARS[@]}"; do
-        local value=$(get_env_var "" "$var" "$ENV_FILE" 2>/dev/null || echo "")
-        [[ -n "$value" ]] && upload_secret "$var" "$value" "$env" || ((errors++))
-      done
-    else
-      upload_variables "$env" "${ENV_REQUIRED_VARS[@]}" "${ENV_OPTIONAL_VARS[@]}" || ((errors++))
-      
-      for var in "${ENV_SECRET_VARS[@]}"; do
-        local value=$(get_env_var "" "${env}_${var}" "$ENV_FILE" 2>/dev/null || echo "")
-        [[ -n "$value" ]] && upload_secret "$var" "$value" "$env" || ((errors++))
-      done
-      
-      # SSH key
-      local ssh_key_path="$HOME/.ssh/${SSH_KEY:-id_github}"
-      if [[ -f "$ssh_key_path" ]]; then
-        upload_secret "SSH_KEY" "$(cat "$ssh_key_path")" "$env" || ((errors++))
-      fi
-      
-      # Known hosts
-      local ssh_host_var="${env}_SSH_HOST"
-      local ssh_host="${!ssh_host_var:-}"
-      if [[ -n "$ssh_host" ]]; then
-        local known_hosts=$(ssh-keyscan "$ssh_host" 2>/dev/null || echo "")
-        [[ -n "$known_hosts" ]] && gh variable set "KNOWN_HOSTS" --env "$env" --body "$known_hosts" --repo "$REPO_FULL" >/dev/null 2>&1
-      fi
-    fi
-  done
-  
-  if [[ $errors -eq 0 ]]; then
-    log_ok "GitHub upload completed successfully"
-  else
-    log_error "Upload completed with $errors errors"
-    exit 1
-  fi
-}
-
-main() {
-  export NO_COLOR=1
-  
-  parse_args "$@"
-  
-  if [[ ! -f ".env" ]]; then
-    wizard_mode
-  else
-    validate_and_load_env "${PARSED_ARGS[0]:-}"
-  fi
-  
-  # Verify GitHub CLI and authentication
-  command -v gh >/dev/null || { log_error "GitHub CLI not found"; exit 1; }
-  gh auth status >/dev/null 2>&1 || { log_error "GitHub CLI not authenticated"; exit 1; }
-  gh repo view "$REPO_FULL" >/dev/null 2>&1 || { log_error "Cannot access repository $REPO_FULL"; exit 1; }
-  
-  upload_github_data
+  load_environment "${PARSED_ARGS[0]:-}" "--skip-validation"
 }
 
 main "$@"

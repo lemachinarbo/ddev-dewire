@@ -221,4 +221,10 @@ parse_silent_flag() {
 # ================================
 
 # Source the environment loader module
-source "$(dirname "${BASH_SOURCE[0]}")/env-loader.sh"
+# For backward compatibility, provide access to the new simplified loader
+source "$(dirname "${BASH_SOURCE[0]}")/env-loader-simple.sh"
+
+# Backward compatibility alias
+validate_and_load_env() {
+  load_environment "$@"
+}

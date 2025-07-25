@@ -4,6 +4,11 @@ project_files:
   - docker-compose.compwser.yaml
   - commands/host/lib/common.sh
   - commands/host/lib/env-loader.sh
+  - commands/host/lib/env-loader-simple.sh
+  - commands/host/lib/schema-parser.sh
+  - commands/host/lib/env-validator.sh
+  - commands/host/lib/env-wizard.sh
+  - commands/host/lib/github-uploader.sh
   - commands/host/lib/.env.schema
   - commands/host/dewire
   - commands/host/dw-config-split
