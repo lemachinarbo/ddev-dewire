@@ -5,6 +5,7 @@ project_files:
   - commands/host/lib/common.sh
   - commands/host/lib/env-loader.sh
   - commands/host/lib/env-loader-simple.sh
+  - commands/host/lib/env-selector.sh
   - commands/host/lib/schema-parser.sh
   - commands/host/lib/env-validator.sh
   - commands/host/lib/env-wizard.sh
