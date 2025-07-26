@@ -239,7 +239,6 @@ is_env_complete() {
   missing_vars=("${filtered_vars[@]}")
   
   # Debug: show the array contents and count
-  debug "is_env_complete - Array count: ${#missing_vars[@]}"
   debug "is_env_complete - Array contents: '${missing_vars[*]}'"
   for i in "${!missing_vars[@]}"; do
     debug "is_env_complete - Element $i: '${missing_vars[$i]}'"

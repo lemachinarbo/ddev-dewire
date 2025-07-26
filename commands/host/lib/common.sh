@@ -1,5 +1,3 @@
-
-# shellcheck shell=bash
 #ddev-generated
 # shellcheck shell=bash
 
@@ -17,6 +15,7 @@ GREEN='\033[0;32m'
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
 MAGENTA='\033[1;35m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Status symbols
@@ -40,9 +39,9 @@ log_ok() { echo -e "${SYM_OK_COLOR} $*"; }
 log_success() { echo -e "${GREEN}$*"; }
 log_info() { echo -e "${NC}$*"; }
 log_header() {
-    echo
-    echo -e "${YELLOW}$*${NC}"
-    log_hr
+        echo
+        echo -e "${YELLOW}$*${NC}"
+        log_hr
 }
 log_ask() {
     # Usage: log_ask "Prompt text [default]: "
@@ -67,11 +66,18 @@ log_option() {
 }
 
 log_step() {
-  echo -e "${MAGENTA}"
-  echo "========================================"
-  echo " $* "
-  echo "========================================"
-  echo -e "${NC}"
+    echo -e "${MAGENTA}"
+    echo "========================================"
+    echo " $* "
+    echo "========================================"
+    echo -e "${NC}"
+}
+
+# Global debug function for all scripts
+debug() {
+    if [[ "$DEBUG" == true ]]; then
+        log_info "${CYAN}[DEBUG] $*${NC}"
+    fi
 }
 
 

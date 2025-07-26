@@ -6,10 +6,12 @@
 set -euo pipefail
 
 
+# Script directory and main env file
 SCRIPT_DIR="$(dirname "$0")"
 readonly SCRIPT_DIR
- # shellcheck source=lib/common.sh
- source "${SCRIPT_DIR}/lib/common.sh"
+readonly ENV_FILE=".env"
+# shellcheck source=lib/common.sh
+source "${SCRIPT_DIR}/lib/common.sh"
 
 # Import the new libraries
 # shellcheck source=lib/schema-parser.sh
@@ -42,31 +44,71 @@ Options:
 EOF
 }
 
+# CLI parsing and debug helpers
+parse_args() {
+  while (( $# > 0 )); do
+    case "$1" in
+      --help)
+        show_help
+        exit 0
+        ;;
+      --debug)
+        DEBUG=true
+        ;;
+      --dontaskme)
+        DONTASKME=true
+        ;;
+      --dry-run)
+        DRY_RUN=true
+        ;;
+      -* )
+        log_error "Unknown option: $1"
+        exit 1
+        ;;
+      * )
+        PARSED_ARGS+=("$1")
+        ;;
+    esac
+    shift
+  done
+  export DEBUG DONTASKME DRY_RUN
+}
+
+
 # Main chain of execution
 main() {
   export NO_COLOR=1
-  parse_script_args "$@"
+  parse_args "$@"
   show_welcome
 
-  # Prompt for setup mode before any handler is called
   choose_setup_mode
-
-  # Centralized .env fix/backup logic after user selects mode
-  if [[ -f ".env" && -s ".env" ]]; then
+  debug "After choose_setup_mode: SETUP_MODE=${SETUP_MODE}"
+  
+  # Always check/fix completeness after mode selection
+  if [[ -f $ENV_FILE && -s $ENV_FILE ]]; then
+    # Parse schema to check completeness for selected mode
     parse_env_schema false
-    if ! is_env_complete ".env"; then
+    debug "After parse_env_schema: LOCAL_REQUIRED_VARS has ${#LOCAL_REQUIRED_VARS[@]} items"
+    debug "Calling is_env_complete..."
+    if ! is_env_complete "$ENV_FILE"; then
+      debug "File is incomplete, backing up and fixing..."
       backup_env_file
-      fix_incomplete_env ".env"
+      fix_incomplete_env "$ENV_FILE"
+    else
+      debug "File is complete, proceeding..."
     fi
   else
-    # If .env doesn't exist or is empty, create it for the selected mode
-    if [[ "$SETUP_MODE" == "env" ]]; then
-      handle_env_mode
-    elif [[ "$SETUP_MODE" == "local" ]]; then
-      handle_local_mode
-    else
-      handle_all_mode
-    fi
+    # Generate new .env file for selected mode
+    parse_env_schema false  # Parse schema for wizard mode
+    case "$SETUP_MODE" in
+      env|local|all)
+        generate_env_for_mode
+        ;;
+      *)
+        log_error "Unknown setup mode: $SETUP_MODE"
+        exit 1
+        ;;
+    esac
   fi
 
   load_selected_environment
@@ -74,87 +116,44 @@ main() {
 }
 
 
-# Backup .env if it exists and is about to be modified
+# Backup env file if it exists and is non-empty
 backup_env_file() {
-  if [[ -f ".env" && -s ".env" ]]; then
+  if [[ -f $ENV_FILE && -s $ENV_FILE ]]; then
     TIMESTAMP=$(date +"%Y%m%d%H%M%S")
-    log_info "Backing up existing .env to .env.backup.$TIMESTAMP"
-    cp .env ".env.backup.$TIMESTAMP"
+    log_info "Backing up existing $ENV_FILE to $ENV_FILE.backup.$TIMESTAMP"
+    cp $ENV_FILE "$ENV_FILE.backup.$TIMESTAMP"
   fi
 }
 
-# Step 1: Parse script arguments
-parse_script_args() {
-  parse_args "$@"
-}
 
-# Handle local-only mode
-handle_local_mode() {
-  # Generate new .env with local variables only
+# Generate environment via wizard for selected mode
+generate_env_for_mode() {
   wizard_mode
   export WIZARD_COMPLETED=true
 }
+# Note: generate_env_for_mode replaces handle_wizard_mode
 
-# Handle environments-only mode  
-handle_env_mode() {
-  # Generate new .env for env mode
-  wizard_mode
-  export WIZARD_COMPLETED=true
-}
-
-# Handle all mode (local + environments)
-handle_all_mode() {
-  # Generate everything via wizard
-  wizard_mode
-  export WIZARD_COMPLETED=true
-}
-
-# Step 2: Show header and info
+# Welcome banner
 show_welcome() {
-  log_header "DeWire Environment Setup Wizard v3"
+  log_header "DeWire Environment Setup Wizard v4"
 }
 
-# Step 3: Check if .env exists and handle accordingly
-handle_env_file() {
-  parse_schema_and_fix_env
-  load_selected_environment
-}
+## DRY: deprecated handlers removed
 
-# Step 4: Parse schema, check/fix .env, and re-parse as needed
-parse_schema_and_fix_env() {
-  debug "Parsing schema for existing .env file"
-  parse_env_schema false
-  
-  # Determine setup mode first, before checking completeness
-  debug "Initial SETUP_MODE value: '${SETUP_MODE:-unset}'"
-  if [[ -z "${SETUP_MODE:-}" ]]; then
-    debug "SETUP_MODE is empty, calling determine_setup_mode"
-    determine_setup_mode ".env"
-    debug "Determined setup mode: $SETUP_MODE"
-  else
-    debug "SETUP_MODE already set to: $SETUP_MODE"
-  fi
-  
-  debug "Checking if .env file is complete for mode: $SETUP_MODE"
-  if ! is_env_complete ".env"; then
-    log_info "Incomplete .env file detected. Fixing missing variables..."
-    parse_env_schema false
-    fix_incomplete_env ".env"
-    log_ok "Variables fixed. Proceeding with environment loading..."
-  fi
-}
 
-# Step 5: Load the selected environment
+# Load selected environment
 load_selected_environment() {
   debug "Entering load_selected_environment, SETUP_MODE=${SETUP_MODE:-unset}"
   local env_arg="${PARSED_ARGS[0]:-}"
   
-  # Skip validation if wizard just completed or we're in local-only mode
+  # Skip validation if wizard just completed, but always validate for existing .env
   debug "WIZARD_COMPLETED=${WIZARD_COMPLETED:-false}, SETUP_MODE=${SETUP_MODE:-unset}"
   
   local load_options=""
-  if [[ "${WIZARD_COMPLETED:-false}" == true ]] || [[ "${SETUP_MODE:-}" == "local" ]]; then
-    load_options="--skip-validation"
+  if [[ "${WIZARD_COMPLETED:-false}" == true ]]; then
+    load_options="--skip-validation --skip-schema-parse"
+  else
+    load_options="--skip-schema-parse"  # Schema already parsed in main
   fi
   
   # Add local mode flag only for local-only mode
@@ -165,7 +164,7 @@ load_selected_environment() {
   load_environment "$env_arg" "$load_options"
 }
 
-# Step 6: Upload to GitHub (or dry run)
+# Upload to GitHub (or dry run)
 upload_to_github() {
   if [[ "${DRY_RUN:-false}" == true ]]; then
     log_ok "Dry run mode - skipping GitHub upload"
@@ -184,82 +183,45 @@ upload_to_github() {
 }
 
 
-parse_args() {
-  while (( $# > 0 )); do
-    case "$1" in
-      --help)
-        show_help
-        exit 0
-        ;;
-      --debug)
-        DEBUG=true
-        ;;
-      --dontaskme)
-        DONTASKME=true
-        ;;
-      --dry-run)
-        DRY_RUN=true
-        ;;
-      -*)
-        log_error "Unknown option: $1"
-        exit 1
-        ;;
-      *)
-        PARSED_ARGS+=("$1")
-        ;;
-    esac
-    shift
-  done
-  export DEBUG DONTASKME DRY_RUN
-}
-
-debug() {
-  if [[ "$DEBUG" == true ]]; then
-    log_info "$*"
-  fi
-}
 
 wizard_mode() {
   log_header "DeWire Environment Setup Wizard v4"
-  if [[ ! -f ".env" ]]; then
-    log_info "No .env file found. Setting up environment."
-  elif [[ ! -s ".env" ]]; then
-    log_info "Empty .env file found. Setting up environment."
+  # Determine which env file to use
+  local env_file="$ENV_FILE"
+  if [[ ! -f $env_file ]]; then
+    log_info "No $env_file found. Setting up environment."
+  elif [[ ! -s $env_file ]]; then
+    log_info "Empty $env_file found. Setting up environment."
   else
-    log_info "Incomplete .env file found. Completing setup."
+    log_info "Incomplete $env_file found. Completing setup."
   fi
-  
-  parse_env_schema false
+
+  # Don't parse schema again - already parsed in main
   log_ok "Schema loaded: ${#REQUIRED_VARS[@]} required, ${#LOCAL_REQUIRED_VARS[@]} local, ${#ENV_REQUIRED_VARS[@]} env variables"
-  
-  if [[ -f ".env.setup" ]]; then
-    log_ok "Loading values from .env.setup"
-    ENV_FILE=".env.setup"
+
+  if [[ -f ${ENV_FILE}.setup ]]; then
+    log_ok "Loading values from ${ENV_FILE}.setup"
+    env_file="${ENV_FILE}.setup"
   fi
-  
-  # Parse DEWIRE flags
+
+  # Parse DEWIRE behavior flags
   local dewire_allow dewire_ask
-  if ! dewire_allow=$(get_env_var "" "DEWIRE_ALLOW_CUSTOM_VARS" "${ENV_FILE:-}" 2>/dev/null); then
+  if ! dewire_allow=$(get_env_var "" "DEWIRE_ALLOW_CUSTOM_VARS" "$env_file" 2>/dev/null); then
     dewire_allow="true"
   fi
-  if ! dewire_ask=$(get_env_var "" "DEWIRE_ASK_ON_CUSTOM_VARS" "${ENV_FILE:-}" 2>/dev/null); then
+  if ! dewire_ask=$(get_env_var "" "DEWIRE_ASK_ON_CUSTOM_VARS" "$env_file" 2>/dev/null); then
     dewire_ask="true"
   fi
   export DEWIRE_ALLOW_CUSTOM_VARS="$dewire_allow"
   export DEWIRE_ASK_ON_CUSTOM_VARS="$dewire_ask"
-  
-  choose_setup_mode "${PARSED_ARGS[@]}"
+
+  # Don't call choose_setup_mode again - already set in main
   generate_env
-  
-  ENV_FILE=".env"
-  
-  # Determine load options based on setup mode
-  local load_options="--skip-validation"
-  if [[ "${SETUP_MODE:-}" == "local" ]]; then
-    load_options="$load_options --local"
-  fi
-  
-  load_environment "${PARSED_ARGS[0]:-}" "$load_options"
+
+  # After generation, load the main env file
+  local load_opts="--skip-validation --skip-schema-parse"  # Schema already parsed above
+  [[ "${SETUP_MODE:-}" == "local" ]] && load_opts="$load_opts --local"
+  load_environment "${PARSED_ARGS[0]:-}" "$load_opts"
 }
 
 main "$@"

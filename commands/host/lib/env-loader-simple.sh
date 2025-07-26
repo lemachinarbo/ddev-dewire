@@ -12,7 +12,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/schema-parser.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/env-validator.sh"
 
 # Environment configuration
-ENV_FILE=".env"
+# ENV_FILE is set by the main script if needed
 
 # Get default value for environment variable
 get_env_default() {
@@ -38,26 +38,19 @@ check_env_file_exists() {
 
 # Load all environment variables into global scope
 load_env_variables() {
-  debug "Entering load_env_variables"
   local env_file="${1:-$ENV_FILE}"
-  debug "env_file=$env_file"
-  debug "Starting load_env_variables with file: $env_file"
   
   [[ ! -f "$env_file" ]] && { debug "Env file not found: $env_file"; return 1; }
   debug "File check passed"
   debug "Env file exists"
   
-  debug "About to load variables from schema arrays"
   debug "Loading variables from schema arrays"
   debug "Array sizes: REQUIRED_VARS=${#REQUIRED_VARS[@]} LOCAL_REQUIRED_VARS=${#LOCAL_REQUIRED_VARS[@]}"
-  debug "Starting variable loading loop"
   # Load all variables from schema arrays
   debug "Arrays to process: REQUIRED_VARS(${#REQUIRED_VARS[@]}), OPTIONAL_VARS(${#OPTIONAL_VARS[@]}), LOCAL_REQUIRED_VARS(${#LOCAL_REQUIRED_VARS[@]}), LOCAL_OPTIONAL_VARS(${#LOCAL_OPTIONAL_VARS[@]})"
   for var in "${REQUIRED_VARS[@]}" "${OPTIONAL_VARS[@]}" "${LOCAL_REQUIRED_VARS[@]}" "${LOCAL_OPTIONAL_VARS[@]}"; do
-  debug "Processing variable: '$var'"
   [[ -z "$var" ]] && { debug "Skipping empty variable"; continue; }  # Skip empty variable names
     local value
-  debug "Getting value for $var"
     if value=$(get_env_var "" "$var" "$env_file" 2>/dev/null); then
       if [[ -n "$value" ]]; then
         declare -g "$var"="$value"
@@ -70,10 +63,7 @@ load_env_variables() {
   debug "Failed to get value for $var"
     fi
   done
-  debug "Finished variable loading loop"
-  debug "Finished loading base variables"
   
-  debug "About to load environment-specific variables"
   debug "Loading environment-specific variables"
   # Load environment-specific variables for ALL environments
   local environments
@@ -84,7 +74,6 @@ load_env_variables() {
   debug "get_env_environments failed, setting empty"
     environments=""
   fi
-  debug "get_env_environments returned: '$environments'"
   debug "get_env_environments returned: '$environments'"
   if [[ -n "$environments" ]]; then
     debug "Found environments, loading env-specific variables"
@@ -155,6 +144,7 @@ load_environment() {
   local permissive_mode="false"
   local local_mode="false"
   local skip_validation="false"
+  local skip_schema_parse="false"
   
   case "$options" in
     *"--silent"*) silent_mode="true" ;;
@@ -168,14 +158,19 @@ load_environment() {
   case "$options" in
     *"--skip-validation"*) skip_validation="true" ;;
   esac
+  case "$options" in
+    *"--skip-schema-parse"*) skip_schema_parse="true" ;;
+  esac
   
   # Check for environment variables  
   [[ "${ALLOW_MISSING_ENV:-false}" == "true" ]] && permissive_mode="true"
   
   [[ "$silent_mode" == "false" ]] && log_info "Loading environment..."
   
-  # Step 1: Parse schema
-  parse_env_schema "$silent_mode"
+  # Step 1: Parse schema (unless already parsed)
+  if [[ "$skip_schema_parse" == "false" ]]; then
+    parse_env_schema "$silent_mode"
+  fi
   
   # Step 2: Check .env file exists
   if ! check_env_file_exists "$permissive_mode"; then
