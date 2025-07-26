@@ -23,6 +23,7 @@ source "${SCRIPT_DIR}/lib/github-uploader.sh"
 # shellcheck source=lib/env-loader-simple.sh
 source "${SCRIPT_DIR}/lib/env-loader-simple.sh"
 
+
 # Global flags
 DEBUG=false
 DONTASKME=false
@@ -46,32 +47,40 @@ main() {
   export NO_COLOR=1
   parse_script_args "$@"
   show_welcome
-  
-  # Always prompt for setup mode first
+
+  # Prompt for setup mode before any handler is called
   choose_setup_mode
-  
-  # Backup existing .env if present
+
+  # Centralized .env fix/backup logic after user selects mode
+  if [[ -f ".env" && -s ".env" ]]; then
+    parse_env_schema false
+    if ! is_env_complete ".env"; then
+      backup_env_file
+      fix_incomplete_env ".env"
+    fi
+  else
+    # If .env doesn't exist or is empty, create it for the selected mode
+    if [[ "$SETUP_MODE" == "env" ]]; then
+      handle_env_mode
+    elif [[ "$SETUP_MODE" == "local" ]]; then
+      handle_local_mode
+    else
+      handle_all_mode
+    fi
+  fi
+
+  load_selected_environment
+  upload_to_github
+}
+
+
+# Backup .env if it exists and is about to be modified
+backup_env_file() {
   if [[ -f ".env" && -s ".env" ]]; then
     TIMESTAMP=$(date +"%Y%m%d%H%M%S")
     log_info "Backing up existing .env to .env.backup.$TIMESTAMP"
     cp .env ".env.backup.$TIMESTAMP"
   fi
-  
-  # Handle based on chosen mode and .env existence
-  if [[ "$SETUP_MODE" == "env" ]]; then
-    # For env mode: need environments, might need to create them
-    handle_env_mode
-  elif [[ "$SETUP_MODE" == "local" ]]; then
-    # For local mode: just fix local variables
-    handle_local_mode
-  else
-    # For all mode: handle both
-    handle_all_mode
-  fi
-  
-  # Load environment with mode-specific options
-  load_selected_environment
-  upload_to_github
 }
 
 # Step 1: Parse script arguments
@@ -81,79 +90,23 @@ parse_script_args() {
 
 # Handle local-only mode
 handle_local_mode() {
-  parse_env_schema false
-  if [[ -f ".env" && -s ".env" ]]; then
-    if ! is_env_complete ".env"; then
-      fix_incomplete_env ".env"
-    fi
-  else
-    # Generate new .env with local variables only
-    wizard_mode
-    export WIZARD_COMPLETED=true
-  fi
+  # Generate new .env with local variables only
+  wizard_mode
+  export WIZARD_COMPLETED=true
 }
 
 # Handle environments-only mode  
 handle_env_mode() {
-  parse_env_schema false
-  # Check if we have required repo variables
-  local missing_repo=()
-  for var in REPO_OWNER REPO_NAME CI_TOKEN; do
-    if [[ -f ".env" ]]; then
-      if ! grep -q "^${var}=" ".env" 2>/dev/null; then
-        missing_repo+=("$var")
-      fi
-    else
-      missing_repo+=("$var")
-    fi
-  done
-  
-  # Prompt for missing repo variables first
-  if [[ ${#missing_repo[@]} -gt 0 ]]; then
-    log_info "Need repository variables for deployment:"
-    for var in "${missing_repo[@]}"; do
-      prompt_missing_var "$var" ".env"
-    done
-  fi
-  
-  # Now handle environment creation/completion
-  if ! grep -q "^ENVIRONMENTS=" ".env" 2>/dev/null; then
-    # No environments defined, prompt for creation
-    log_ask "Enter environment name(s) [PROD]: "
-    read -r environments
-    environments="${environments:-PROD}"
-    echo "ENVIRONMENTS=$environments" >> ".env"
-  fi
-  
-  # Fix any missing environment variables
-  if ! is_env_complete ".env"; then
-    fix_incomplete_env ".env"
-  fi
+  # Generate new .env for env mode
+  wizard_mode
+  export WIZARD_COMPLETED=true
 }
 
 # Handle all mode (local + environments)
 handle_all_mode() {
-  parse_env_schema false
-  if [[ -f ".env" && -s ".env" ]]; then
-    # Check if environments are defined
-    if ! grep -q "^ENVIRONMENTS=" ".env" 2>/dev/null; then
-      # No environments defined, but user wants "all" - prompt for environment creation
-      log_info "No environments found. Let's create one for deployment."
-      log_ask "Enter environment name(s) [PROD]: "
-      read -r environments
-      environments="${environments:-PROD}"
-      echo "ENVIRONMENTS=$environments" >> ".env"
-      log_ok "Added environment: $environments"
-    fi
-    # Fix any missing variables (local + environment)
-    if ! is_env_complete ".env"; then
-      fix_incomplete_env ".env"
-    fi
-  else
-    # Generate everything via wizard
-    wizard_mode
-    export WIZARD_COMPLETED=true
-  fi
+  # Generate everything via wizard
+  wizard_mode
+  export WIZARD_COMPLETED=true
 }
 
 # Step 2: Show header and info
