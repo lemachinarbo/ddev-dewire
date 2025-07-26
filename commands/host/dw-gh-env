@@ -83,8 +83,9 @@ parse_script_args() {
 handle_local_mode() {
   parse_env_schema false
   if [[ -f ".env" && -s ".env" ]]; then
-    # Fix any missing local variables
-    fix_incomplete_env ".env"
+    if ! is_env_complete ".env"; then
+      fix_incomplete_env ".env"
+    fi
   else
     # Generate new .env with local variables only
     wizard_mode
@@ -125,7 +126,9 @@ handle_env_mode() {
   fi
   
   # Fix any missing environment variables
-  fix_incomplete_env ".env"
+  if ! is_env_complete ".env"; then
+    fix_incomplete_env ".env"
+  fi
 }
 
 # Handle all mode (local + environments)
@@ -143,7 +146,9 @@ handle_all_mode() {
       log_ok "Added environment: $environments"
     fi
     # Fix any missing variables (local + environment)
-    fix_incomplete_env ".env"
+    if ! is_env_complete ".env"; then
+      fix_incomplete_env ".env"
+    fi
   else
     # Generate everything via wizard
     wizard_mode
@@ -179,15 +184,10 @@ parse_schema_and_fix_env() {
   
   debug "Checking if .env file is complete for mode: $SETUP_MODE"
   if ! is_env_complete ".env"; then
-    debug ".env file is incomplete - starting fix process"
     log_info "Incomplete .env file detected. Fixing missing variables..."
-    debug "Using setup mode: $SETUP_MODE"
-    debug "Re-parsing schema for mode: $SETUP_MODE"
     parse_env_schema false
     fix_incomplete_env ".env"
     log_ok "Variables fixed. Proceeding with environment loading..."
-  else
-    debug ".env file is complete for mode: $SETUP_MODE"
   fi
 }
 
@@ -201,20 +201,14 @@ load_selected_environment() {
   
   local load_options=""
   if [[ "${WIZARD_COMPLETED:-false}" == true ]] || [[ "${SETUP_MODE:-}" == "local" ]]; then
-    debug "Skipping validation due to wizard completion or local mode"
     load_options="--skip-validation"
-  else
-    debug "Running with validation"
   fi
   
   # Add local mode flag only for local-only mode
   if [[ "${SETUP_MODE:-}" == "local" ]]; then
-    debug "Adding --local flag to load_options"
     load_options="$load_options --local"
   fi
   
-  debug "Final load_options: '$load_options'"
-  debug "Calling load_environment with options: '$load_options'"
   load_environment "$env_arg" "$load_options"
 }
 
@@ -240,12 +234,26 @@ upload_to_github() {
 parse_args() {
   while (( $# > 0 )); do
     case "$1" in
-      --help) show_help; exit 0 ;;
-      --debug) DEBUG=true ;;
-      --dontaskme) DONTASKME=true ;;
-      --dry-run) DRY_RUN=true ;;
-      -*) log_error "Unknown option: $1"; exit 1 ;;
-      *) PARSED_ARGS+=("$1") ;;
+      --help)
+        show_help
+        exit 0
+        ;;
+      --debug)
+        DEBUG=true
+        ;;
+      --dontaskme)
+        DONTASKME=true
+        ;;
+      --dry-run)
+        DRY_RUN=true
+        ;;
+      -*)
+        log_error "Unknown option: $1"
+        exit 1
+        ;;
+      *)
+        PARSED_ARGS+=("$1")
+        ;;
     esac
     shift
   done
@@ -288,7 +296,6 @@ wizard_mode() {
   export DEWIRE_ASK_ON_CUSTOM_VARS="$dewire_ask"
   
   choose_setup_mode "${PARSED_ARGS[@]}"
-  debug "Final SETUP_MODE: ${SETUP_MODE:-unset}"
   generate_env
   
   ENV_FILE=".env"
@@ -298,7 +305,6 @@ wizard_mode() {
   if [[ "${SETUP_MODE:-}" == "local" ]]; then
     load_options="$load_options --local"
   fi
-  debug "Load options: $load_options"
   
   load_environment "${PARSED_ARGS[0]:-}" "$load_options"
 }
