@@ -1,113 +1,71 @@
 #!/usr/bin/env bash
 #ddev-generated
 # Schema-driven GitHub environment setup with wizard mode
-# Usage: dw-gh-env [ENV] [--debug] [--dontaskme]
+# Usage: dw-gh-env [ENV] [--debug] [--lazy] [--dry-run]
 
 set -euo pipefail
-
 
 # Script directory and main env file
 SCRIPT_DIR="$(dirname "$0")"
 readonly SCRIPT_DIR
 readonly ENV_FILE=".env"
-# shellcheck source=lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
 
 # Import the new libraries
-# shellcheck source=lib/schema-parser.sh
 source "${SCRIPT_DIR}/lib/schema-parser.sh"
-# shellcheck source=lib/env-validator.sh
 source "${SCRIPT_DIR}/lib/env-validator.sh"
-# shellcheck source=lib/env-wizard.sh
 source "${SCRIPT_DIR}/lib/env-wizard.sh"
-# shellcheck source=lib/github-uploader.sh
 source "${SCRIPT_DIR}/lib/github-uploader.sh"
-# shellcheck source=lib/env-loader-simple.sh
 source "${SCRIPT_DIR}/lib/env-loader-simple.sh"
-
 
 # Global flags
 DEBUG=false
-DONTASKME=false
-SETUP_MODE=""  # Will be auto-detected if not set
+LAZY_MODE=false
+SETUP_MODE="" # Will be auto-detected if not set
 PARSED_ARGS=()
 
 show_help() {
-  cat << EOF
+  cat <<EOF
 dw-gh-env: Schema-driven GitHub environment setup with wizard mode
-Usage: ddev dw-gh-env [ENV] [--debug] [--dontaskme]
+Usage: ddev dw-gh-env [ENV] [--debug] [--lazy] [--dry-run] [--verbose]
 
 Options:
   --debug      Show detailed debug information
-  --dontaskme  Skip all prompts, only upload schema-defined vars
+  --lazy       Accept all defaults without prompting
   --dry-run    Skip GitHub upload (for testing)
+  --verbose    Show extra info output
 EOF
 }
 
-# CLI parsing and debug helpers
-parse_args() {
-  while (( $# > 0 )); do
-    case "$1" in
-      --help)
-        show_help
-        exit 0
-        ;;
-      --debug)
-        DEBUG=true
-        ;;
-      --dontaskme)
-        DONTASKME=true
-        ;;
-      --dry-run)
-        DRY_RUN=true
-        ;;
-      -* )
-        log_error "Unknown option: $1"
-        exit 1
-        ;;
-      * )
-        PARSED_ARGS+=("$1")
-        ;;
-    esac
-    shift
-  done
-  export DEBUG DONTASKME DRY_RUN
-}
-
-
-# Main chain of execution
 main() {
   export NO_COLOR=1
   parse_args "$@"
-  show_welcome
+  log_header "Environment Setup"
+  log_info "We’ll prepare a local .env file with settings for your environments."
 
   choose_setup_mode
-  debug "After choose_setup_mode: SETUP_MODE=${SETUP_MODE}"
-  
+
   # Always check/fix completeness after mode selection
   if [[ -f $ENV_FILE && -s $ENV_FILE ]]; then
     # Parse schema to check completeness for selected mode
     parse_env_schema false
     debug "After parse_env_schema: LOCAL_REQUIRED_VARS has ${#LOCAL_REQUIRED_VARS[@]} items"
-    debug "Calling is_env_complete..."
     if ! is_env_complete "$ENV_FILE"; then
       debug "File is incomplete, backing up and fixing..."
       backup_env_file
       fix_incomplete_env "$ENV_FILE"
-    else
-      debug "File is complete, proceeding..."
     fi
   else
     # Generate new .env file for selected mode
-    parse_env_schema false  # Parse schema for wizard mode
+    parse_env_schema false # Parse schema for wizard mode
     case "$SETUP_MODE" in
-      env|local|all)
-        generate_env_for_mode
-        ;;
-      *)
-        log_error "Unknown setup mode: $SETUP_MODE"
-        exit 1
-        ;;
+    env | local | all)
+      generate_env_for_mode
+      ;;
+    *)
+      log_error "Unknown setup mode: $SETUP_MODE"
+      exit 1
+      ;;
     esac
   fi
 
@@ -115,6 +73,38 @@ main() {
   upload_to_github
 }
 
+# CLI parsing and debug helpers
+parse_args() {
+  while (($# > 0)); do
+    case "$1" in
+    --help)
+      show_help
+      exit 0
+      ;;
+    --debug)
+      DEBUG=true
+      ;;
+    --lazy)
+      LAZY_MODE=true
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      ;;
+    --verbose)
+      VERBOSE=true
+      ;;
+    -*)
+      log_error "Unknown option: $1"
+      exit 1
+      ;;
+    *)
+      PARSED_ARGS+=("$1")
+      ;;
+    esac
+    shift
+  done
+  export DEBUG DRY_RUN LAZY_MODE VERBOSE
+}
 
 # Backup env file if it exists and is non-empty
 backup_env_file() {
@@ -125,42 +115,31 @@ backup_env_file() {
   fi
 }
 
-
 # Generate environment via wizard for selected mode
 generate_env_for_mode() {
   wizard_mode
   export WIZARD_COMPLETED=true
 }
-# Note: generate_env_for_mode replaces handle_wizard_mode
-
-# Welcome banner
-show_welcome() {
-  log_header "DeWire Environment Setup Wizard v4"
-}
-
-## DRY: deprecated handlers removed
-
 
 # Load selected environment
 load_selected_environment() {
-  debug "Entering load_selected_environment, SETUP_MODE=${SETUP_MODE:-unset}"
   local env_arg="${PARSED_ARGS[0]:-}"
-  
+
   # Skip validation if wizard just completed, but always validate for existing .env
   debug "WIZARD_COMPLETED=${WIZARD_COMPLETED:-false}, SETUP_MODE=${SETUP_MODE:-unset}"
-  
+
   local load_options=""
   if [[ "${WIZARD_COMPLETED:-false}" == true ]]; then
     load_options="--skip-validation --skip-schema-parse"
   else
-    load_options="--skip-schema-parse"  # Schema already parsed in main
+    load_options="--skip-schema-parse" # Schema already parsed in main
   fi
-  
+
   # Add local mode flag only for local-only mode
   if [[ "${SETUP_MODE:-}" == "local" ]]; then
     load_options="$load_options --local"
   fi
-  
+
   load_environment "$env_arg" "$load_options"
 }
 
@@ -169,10 +148,11 @@ upload_to_github() {
   if [[ "${DRY_RUN:-false}" == true ]]; then
     log_ok "Dry run mode - skipping GitHub upload"
   else
-   
-    # Prompt unless --dontaskme is set
-    if [[ "$DONTASKME" != true ]]; then
-      read -rp "Proceed with upload? [y/N]: " confirm
+
+    if [[ "$LAZY_MODE" != true ]]; then
+      log_ask "Proceed with upload? [Y/n]: "
+      read -r confirm
+      confirm=${confirm:-y}
       if [[ ! "$confirm" =~ ^[Yy] ]]; then
         log_info "Upload cancelled by user."
         return 1
@@ -181,8 +161,6 @@ upload_to_github() {
     upload_github_data
   fi
 }
-
-
 
 wizard_mode() {
   log_header "DeWire Environment Setup Wizard v4"
@@ -219,7 +197,7 @@ wizard_mode() {
   generate_env
 
   # After generation, load the main env file
-  local load_opts="--skip-validation --skip-schema-parse"  # Schema already parsed above
+  local load_opts="--skip-validation --skip-schema-parse" # Schema already parsed above
   [[ "${SETUP_MODE:-}" == "local" ]] && load_opts="$load_opts --local"
   load_environment "${PARSED_ARGS[0]:-}" "$load_opts"
 }
