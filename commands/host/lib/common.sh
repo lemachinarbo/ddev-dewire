@@ -1,4 +1,7 @@
+
+# shellcheck shell=bash
 #ddev-generated
+# shellcheck shell=bash
 
 APP_DIR="dewire"
 APP_PATH="$DDEV_APPROOT/.ddev/$APP_DIR"
@@ -25,6 +28,7 @@ SYM_WARNING="!"
 # Colored status symbols
 SYM_OK_COLOR="${GREEN}${SYM_OK}${NC}"
 SYM_ERROR_COLOR="${RED}${SYM_ERROR}${NC}"
+# shellcheck disable=SC2034
 SYM_NOT_SET_COLOR="${YELLOW}${SYM_NOT_SET}${NC}"
 SYM_WARNING_COLOR="${YELLOW}${SYM_WARNING}${NC}"
 
@@ -43,8 +47,10 @@ log_header() {
 log_ask() {
     # Usage: log_ask "Prompt text [default]: "
     local prompt="$*"
-    local yellow="$(printf '\033[1;33m')"
-    local nc="$(printf '\033[0m')"
+    local yellow
+    yellow="$(printf '\033[1;33m')"
+    local nc
+    nc="$(printf '\033[0m')"
     # Colorize anything inside [ ] in yellow using ANSI codes directly
     prompt=$(echo "$prompt" | sed -E "s/\[([^]]+)\]/${yellow}[\1]${nc}/g")
     printf "%b" "$prompt"
@@ -73,7 +79,8 @@ log_step() {
 select_environment() {
     local env_arg="$1"
     local allowed_envs="$2"
-    local envs=($allowed_envs)
+    local envs
+    IFS=' ' read -r -a envs <<< "$allowed_envs"
     if [ -n "$env_arg" ]; then
         for env in "${envs[@]}"; do
             if [ "$env" = "$env_arg" ]; then
@@ -93,7 +100,7 @@ select_environment() {
     local selection
     while true; do
         log_ask "Select environment number [1]: "
-        read selection
+    read -r selection
         selection=${selection:-1}
         if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "${#envs[@]}" ]; then
             env="${envs[$((selection - 1))]}"
@@ -135,7 +142,7 @@ ask_user() {
     echo  # Add newline after auto response
   else
     log_ask "$prompt"
-    read reply
+    read -r reply
     reply=${reply:-y}
   fi
   REPLY="$reply"
@@ -185,6 +192,7 @@ parse_script_args() {
                 DEBUG_MODE=true
                 ;;
             --local)
+                # shellcheck disable=SC2034
                 LOCAL_FLAG="--local"
                 ;;
             *)
@@ -209,6 +217,7 @@ parse_silent_flag() {
     
     for arg in "$@"; do
         if [[ "$arg" == "--silent" ]]; then
+            # shellcheck disable=SC2034
             SILENT_FLAG="--silent"
         else
             SILENT_ARGS+=("$arg")
@@ -222,6 +231,7 @@ parse_silent_flag() {
 
 # Source the environment loader module
 # For backward compatibility, provide access to the new simplified loader
+# shellcheck source=./env-loader-simple.sh
 source "$(dirname "${BASH_SOURCE[0]}")/env-loader-simple.sh"
 
 # Backward compatibility alias

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck shell=bash
 # Environment Validator Library
 # Single responsibility: Validate .env files against schema
 
@@ -72,6 +73,10 @@ check_missing_variables() {
   if [[ "${SETUP_MODE:-all}" == "local" || "${SETUP_MODE:-all}" == "all" ]]; then
     for var in "${LOCAL_REQUIRED_VARS[@]}"; do
       [[ -z "$var" ]] && continue  # Skip empty variable names
+      # Skip ENVIRONMENTS in local mode - it's only required for deployment modes
+      if [[ "$var" == "ENVIRONMENTS" && "${SETUP_MODE:-all}" == "local" ]]; then
+        continue
+      fi
       if ! grep -q "^${var}=" "$env_file" 2>/dev/null; then
         missing_vars+=("$var")
       fi
@@ -215,8 +220,7 @@ is_env_complete() {
   
   # Simple count of variables (any line with =)
   local var_count
-  var_count=$(grep -c '=' "$env_file" 2>/dev/null)
-  if [[ $? -ne 0 ]]; then
+  if ! var_count=$(grep -c '=' "$env_file" 2>/dev/null); then
     var_count=0
   fi
   if [[ "$var_count" -lt 3 ]]; then
@@ -226,5 +230,20 @@ is_env_complete() {
   # Use the existing check_missing_variables function
   local missing_vars
   mapfile -t missing_vars < <(check_missing_variables "$env_file")
+  
+  # Filter out empty elements from the array
+  local filtered_vars=()
+  for var in "${missing_vars[@]}"; do
+    [[ -n "$var" ]] && filtered_vars+=("$var")
+  done
+  missing_vars=("${filtered_vars[@]}")
+  
+  # Debug: show the array contents and count
+  debug "is_env_complete - Array count: ${#missing_vars[@]}"
+  debug "is_env_complete - Array contents: '${missing_vars[*]}'"
+  for i in "${!missing_vars[@]}"; do
+    debug "is_env_complete - Element $i: '${missing_vars[$i]}'"
+  done
+  
   [[ ${#missing_vars[@]} -eq 0 ]]
 }

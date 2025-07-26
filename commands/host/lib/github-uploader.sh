@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck shell=bash
 # GitHub Uploader Library
 # Single responsibility: Upload variables and secrets to GitHub
 
@@ -112,7 +113,9 @@ upload_github_data() {
   for var in "${REPO_SECRET_VARS[@]}"; do
     local value
     value=$(get_env_var "" "$var" "$ENV_FILE" 2>/dev/null || echo "")
-    [[ -n "$value" ]] && upload_secret "$var" "$value" "repo" || ((errors++))
+    if [[ -n "$value" ]]; then
+      upload_secret "$var" "$value" "repo" || ((errors++))
+    fi
   done
   
   # Environment-specific data
@@ -131,7 +134,9 @@ upload_github_data() {
       for var in "${LOCAL_SECRET_VARS[@]}"; do
         local value
         value=$(get_env_var "" "$var" "$ENV_FILE" 2>/dev/null || echo "")
-        [[ -n "$value" ]] && upload_secret "$var" "$value" "$env" || ((errors++))
+        if [[ -n "$value" ]]; then
+          upload_secret "$var" "$value" "$env" || ((errors++))
+        fi
       done
     else
       upload_variables "$env" "${ENV_REQUIRED_VARS[@]}" "${ENV_OPTIONAL_VARS[@]}" || ((errors++))
@@ -139,7 +144,9 @@ upload_github_data() {
       for var in "${ENV_SECRET_VARS[@]}"; do
         local value
         value=$(get_env_var "" "${env}_${var}" "$ENV_FILE" 2>/dev/null || echo "")
-        [[ -n "$value" ]] && upload_secret "$var" "$value" "$env" || ((errors++))
+        if [[ -n "$value" ]]; then
+          upload_secret "$var" "$value" "$env" || ((errors++))
+        fi
       done
       
       # SSH key upload

@@ -13,7 +13,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/env-validator.sh"
 # Check if value has placeholder content
 has_placeholder() {
   local value="$1"
-  [[ "$value" == *"your-"* || "$value" == *"example"* || "$value" == *"password1234"* || "$value" == *"yourdomain"* || "$value" == *"/your/"* ]]
+  # Check for specific placeholder patterns, not broad matches like "example"
+  [[ "$value" == *"your-"* || "$value" == *"password1234"* || "$value" == *"yourdomain"* || "$value" == *"/your/"* || "$value" == "example_user" || "$value" == "example_db" ]]
 }
 
 # Validate user input based on variable type
@@ -126,50 +127,49 @@ fix_incomplete_env() {
   # Get missing variables from validator
   mapfile -t missing_vars < <(check_missing_variables "$env_file")
   
+  # Filter out empty variables
+  local filtered_vars=()
+  for var in "${missing_vars[@]}"; do
+    [[ -n "$var" ]] && filtered_vars+=("$var")
+  done
+  missing_vars=("${filtered_vars[@]}")
+  
   debug "fix_incomplete_env: Found ${#missing_vars[@]} missing variables: ${missing_vars[*]}"
+  debug "Missing variables list: ${missing_vars[*]}"
   
   # Prompt for missing variables
   if [[ ${#missing_vars[@]} -gt 0 ]]; then
     log_info "Found ${#missing_vars[@]} missing required variable(s)"
+  debug "About to prompt for variables: ${missing_vars[*]}"
     for var in "${missing_vars[@]}"; do
       # Skip empty variable names
       [[ -z "$var" ]] && continue
+  debug "Prompting for variable: $var"
       prompt_missing_var "$var" "$env_file"
     done
     log_ok "Updated $env_file with missing variables"
+  else
+  debug "No missing variables found, but fix_incomplete_env was called"
   fi
 }
 
 # Choose setup mode for initial wizard
 choose_setup_mode() {
-  local parsed_args=("$@")
-  
-  # Check for mode flags
-  for arg in "${parsed_args[@]}"; do
-    case "$arg" in
-      -a) SETUP_MODE="all"; return 0 ;;
-      -l) SETUP_MODE="local"; return 0 ;;
-      -e) SETUP_MODE="env"; return 0 ;;
-    esac
-  done
-  
   log_info "Setup mode:"
   log_option 1 "Local environment only"
-  log_option 2 "Deployment environments" 
+  log_option 2 "Deployment environments"
   log_option 3 "All (local + environments)"
-  
   local selection
   while true; do
     log_ask "Select mode [3]: "
     read -r selection
     case "${selection:-3}" in
       1) SETUP_MODE="local"; break ;;
-      2) SETUP_MODE="env"; break ;;
-      3) SETUP_MODE="all"; break ;;
+      2) SETUP_MODE="env";   break ;;
+      3) SETUP_MODE="all";   break ;;
       *) log_warn "Invalid selection. Choose 1, 2, or 3." ;;
     esac
   done
-  
   export SETUP_MODE
 }
 
@@ -179,24 +179,27 @@ determine_setup_mode() {
   
   # Check what types of variables exist in the file
   local has_local=false
-  local has_repo=false
   local has_env=false
   
   if [[ -f "$env_file" ]]; then
     # Check for local variables (typically DB_HOST, ADMIN_NAME, etc.)
     if grep -q "^DB_HOST=" "$env_file" 2>/dev/null || grep -q "^ADMIN_NAME=" "$env_file" 2>/dev/null; then
       has_local=true
+  debug "Found local variables in $env_file"
     fi
     
     # Check for repository variables
     if grep -q "^REPO_OWNER=" "$env_file" 2>/dev/null || grep -q "^REPO_NAME=" "$env_file" 2>/dev/null; then
-      has_repo=true
+  debug "Found repository variables in $env_file"
     fi
     
     # Check for environment variables (PROD_, STAGING_, etc.)
-    if grep -q "^[A-Z]*_DB_HOST=" "$env_file" 2>/dev/null || grep -q "^[A-Z]*_HOST=" "$env_file" 2>/dev/null; then
+    if grep -q "^[A-Z]+_DB_HOST=" "$env_file" 2>/dev/null || grep -q "^[A-Z]+_HOST=" "$env_file" 2>/dev/null; then
       has_env=true
+  debug "Found environment-specific variables in $env_file"
     fi
+    
+  debug "Variable detection: has_local=$has_local, has_env=$has_env"
   fi
   
   # Determine mode based on existing variables
@@ -212,7 +215,7 @@ determine_setup_mode() {
   else
     # No clear mode detected, prompt user
     log_info "Cannot determine setup mode from existing .env file."
-    choose_setup_mode
+  choose_setup_mode
   fi
   
   export SETUP_MODE

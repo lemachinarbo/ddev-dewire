@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck shell=bash
 # Environment Loader - Compatibility Bridge
 # This file provides backward compatibility by sourcing the new modular libraries
 

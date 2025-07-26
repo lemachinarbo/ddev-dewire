@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck shell=bash
 # Environment Loader Library
 # Single responsibility: Load and expose environment variables
 
@@ -37,38 +38,60 @@ check_env_file_exists() {
 
 # Load all environment variables into global scope
 load_env_variables() {
-  echo "DEBUG: Entering load_env_variables" >&2
+  debug "Entering load_env_variables"
   local env_file="${1:-$ENV_FILE}"
-  echo "DEBUG: env_file=$env_file" >&2
+  debug "env_file=$env_file"
   debug "Starting load_env_variables with file: $env_file"
   
   [[ ! -f "$env_file" ]] && { debug "Env file not found: $env_file"; return 1; }
-  echo "DEBUG: File check passed" >&2
+  debug "File check passed"
   debug "Env file exists"
   
+  debug "About to load variables from schema arrays"
   debug "Loading variables from schema arrays"
+  debug "Array sizes: REQUIRED_VARS=${#REQUIRED_VARS[@]} LOCAL_REQUIRED_VARS=${#LOCAL_REQUIRED_VARS[@]}"
+  debug "Starting variable loading loop"
   # Load all variables from schema arrays
+  debug "Arrays to process: REQUIRED_VARS(${#REQUIRED_VARS[@]}), OPTIONAL_VARS(${#OPTIONAL_VARS[@]}), LOCAL_REQUIRED_VARS(${#LOCAL_REQUIRED_VARS[@]}), LOCAL_OPTIONAL_VARS(${#LOCAL_OPTIONAL_VARS[@]})"
   for var in "${REQUIRED_VARS[@]}" "${OPTIONAL_VARS[@]}" "${LOCAL_REQUIRED_VARS[@]}" "${LOCAL_OPTIONAL_VARS[@]}"; do
-    [[ -z "$var" ]] && continue  # Skip empty variable names
+  debug "Processing variable: '$var'"
+  [[ -z "$var" ]] && { debug "Skipping empty variable"; continue; }  # Skip empty variable names
     local value
+  debug "Getting value for $var"
     if value=$(get_env_var "" "$var" "$env_file" 2>/dev/null); then
       if [[ -n "$value" ]]; then
         declare -g "$var"="$value"
         debug "Loaded: $var=$value"
+  debug "Successfully loaded $var"
+      else
+  debug "Empty value for $var"
       fi
+    else
+  debug "Failed to get value for $var"
     fi
   done
+  debug "Finished variable loading loop"
   debug "Finished loading base variables"
   
+  debug "About to load environment-specific variables"
   debug "Loading environment-specific variables"
   # Load environment-specific variables for ALL environments
   local environments
-  environments=$(get_env_environments "$env_file")
+  debug "Calling get_env_environments"
+  if environments=$(get_env_environments "$env_file" 2>/dev/null); then
+  debug "get_env_environments succeeded: '$environments'"
+  else
+  debug "get_env_environments failed, setting empty"
+    environments=""
+  fi
+  debug "get_env_environments returned: '$environments'"
+  debug "get_env_environments returned: '$environments'"
   if [[ -n "$environments" ]]; then
-    IFS=' ' read -ra env_array <<< "$environments"
+    debug "Found environments, loading env-specific variables"
+    IFS=' ' read -r -a env_array <<< "$environments"
     for env in "${env_array[@]}"; do
       env=$(echo "$env" | xargs | tr -d '"')
-      debug "Loading variables for environment: $env"
+  debug "Loading variables for environment: $env"
       for var in "${ENV_REQUIRED_VARS[@]}" "${ENV_OPTIONAL_VARS[@]}"; do
         [[ -z "$var" ]] && continue  # Skip empty variable names
         local env_var="${env}_${var}"
@@ -81,8 +104,12 @@ load_env_variables() {
         fi
       done
     done
+  else
+    debug "No environments found, skipping env-specific variables"
   fi
+  debug "Finished loading environment-specific variables"
   debug "Finished loading all variables"
+  debug "load_env_variables completed successfully"
 }
 
 # Set up convenience variables for backward compatibility
@@ -119,6 +146,9 @@ setup_convenience_vars() {
 load_environment() {
   local env_arg="${1:-}"
   local options="${2:-}"
+  
+  # Debug: show what arguments we received
+  debug "load_environment called with env_arg='$env_arg' options='$options'"
   
   # Parse options
   local silent_mode="false"
@@ -170,8 +200,11 @@ load_environment() {
   load_env_variables "$ENV_FILE"
   debug "Variables loaded successfully"
   
-  # Step 5: Environment selection (skip if local mode)
-  if [[ "$local_mode" == "false" ]]; then
+  # Step 5: Environment selection (skip if local mode or SETUP_MODE is local)
+  debug "Checking environment selection: local_mode=$local_mode, SETUP_MODE=${SETUP_MODE:-unset}"
+  debug "Environment selection check: local_mode=$local_mode, SETUP_MODE=${SETUP_MODE:-unset}"
+  if [[ "$local_mode" == "false" ]] && [[ "${SETUP_MODE:-}" != "local" ]]; then
+  debug "Entering environment selection logic"
     debug "Resolving environment selection"
     local environments
     environments=$(get_env_environments)
@@ -187,10 +220,15 @@ load_environment() {
     export ENV="$SELECTED_ENV"
     export PREFIX="${ENV}_"
     debug "Environment variables set: ENV=$ENV PREFIX=$PREFIX"
+  else
+    debug "Skipping environment selection due to local mode"
   fi
   
   # Step 6: Setup convenience variables
+  debug "Setting up convenience variables"
   setup_convenience_vars
   
+  debug "About to complete load_environment"
   [[ "$silent_mode" == "false" ]] && log_ok "Environment loaded successfully"
+  debug "load_environment completed successfully"
 }

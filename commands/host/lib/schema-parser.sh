@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck shell=bash
 # Schema Parser Library
 # Single responsibility: Parse .env.schema and provide schema metadata
 
@@ -165,7 +166,7 @@ parse_env_schema() {
     esac
   done < "$schema_file"
   
-  [[ "$silent_mode" == "false" ]] && log_ok "✓ .env schema parsed successfully"
+  [[ "$silent_mode" == "false" ]] && log_ok ".env schema parsed successfully"
 }
 
 # Get default value for a variable
