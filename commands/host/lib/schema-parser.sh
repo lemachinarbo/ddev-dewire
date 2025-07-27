@@ -52,6 +52,13 @@ parse_env_schema() {
     [[ "$line" =~ ^#.*$ ]] && continue
     [[ -z "$line" ]] && continue
     IFS='|' read -r var status default_part context_part <<<"$line"
+
+    # Trim whitespace from all parts
+    var=$(echo "$var" | xargs 2>/dev/null || echo "$var")
+    status=$(echo "$status" | xargs 2>/dev/null || echo "$status")
+    default_part=$(echo "$default_part" | xargs 2>/dev/null || echo "$default_part")
+    context_part=$(echo "$context_part" | xargs 2>/dev/null || echo "$context_part")
+
     [[ -z "$var" || -z "$status" ]] && continue
     local clean_var="$var"
     local var_type="repo"

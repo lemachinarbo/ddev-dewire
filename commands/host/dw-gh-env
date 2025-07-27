@@ -21,7 +21,6 @@ source "${SCRIPT_DIR}/lib/env-loader-simple.sh"
 # Global flags
 DEBUG=false
 LAZY_MODE=false
-SETUP_MODE="" # Will be auto-detected if not set
 PARSED_ARGS=()
 
 show_help() {
@@ -40,37 +39,39 @@ EOF
 main() {
   export NO_COLOR=1
   parse_args "$@"
-  log_header "Environment Setup"
-  log_info "We’ll prepare a local .env file with settings for your environments."
 
-  choose_setup_mode
+  # Parse schema first to get available variables
+  parse_env_schema false
+  debug "Schema parsed: LOCAL_REQUIRED_VARS has ${#LOCAL_REQUIRED_VARS[@]} items, ENV_REQUIRED_VARS has ${#ENV_REQUIRED_VARS[@]} items"
 
-  # Always check/fix completeness after mode selection
-  if [[ -f $ENV_FILE && -s $ENV_FILE ]]; then
-    # Parse schema to check completeness for selected mode
-    parse_env_schema false
-    debug "After parse_env_schema: LOCAL_REQUIRED_VARS has ${#LOCAL_REQUIRED_VARS[@]} items"
-    if ! is_env_complete "$ENV_FILE"; then
-      debug "File is incomplete, backing up and fixing..."
-      backup_env_file
-      fix_incomplete_env "$ENV_FILE"
-    fi
-  else
-    # Generate new .env file for selected mode
-    parse_env_schema false # Parse schema for wizard mode
-    case "$SETUP_MODE" in
-    env | local | all)
-      generate_env_for_mode
-      ;;
-    *)
-      log_error "Unknown setup mode: $SETUP_MODE"
-      exit 1
-      ;;
-    esac
+  # Ensure .env file exists
+  if [[ ! -f $ENV_FILE ]]; then
+    touch "$ENV_FILE"
+    log_info "Created new .env file"
   fi
 
+  # Start the new deployment environment wizard
+  deployment_environment_wizard
+
+  # Check if environments are complete (excluding GitHub variables)
+  debug "Checking if environments are complete (excluding GitHub variables)"
+  if ! is_environments_complete; then
+    # Try to complete incomplete environments interactively
+    if ! complete_incomplete_environments; then
+      return 1
+    fi
+  fi
+
+  log_ok "Environment configuration complete"
+
+  # Setup GitHub variables if needed
+  setup_github_variables
+
+  # Load environment variables and upload
   load_selected_environment
+  debug "✓ Environment loaded successfully"
   upload_to_github
+  debug "✓ Upload process completed"
 }
 
 # CLI parsing and debug helpers
@@ -115,32 +116,22 @@ backup_env_file() {
   fi
 }
 
-# Generate environment via wizard for selected mode
-generate_env_for_mode() {
-  wizard_mode
-  export WIZARD_COMPLETED=true
-}
-
-# Load selected environment
+# Load all configured environments
 load_selected_environment() {
-  local env_arg="${PARSED_ARGS[0]:-}"
+  debug "Loading all configured environments from .env file"
 
-  # Skip validation if wizard just completed, but always validate for existing .env
-  debug "WIZARD_COMPLETED=${WIZARD_COMPLETED:-false}, SETUP_MODE=${SETUP_MODE:-unset}"
+  # The new wizard configures all environments, so we use local mode
+  # to skip the old environment selection logic
+  local load_options="--skip-schema-parse --local"
 
-  local load_options=""
-  if [[ "${WIZARD_COMPLETED:-false}" == true ]]; then
-    load_options="--skip-validation --skip-schema-parse"
+  if load_environment "" "$load_options"; then
+    debug "✓ Environment loading completed successfully"
+    return 0
   else
-    load_options="--skip-schema-parse" # Schema already parsed in main
+    local exit_code=$?
+    debug "❌ Environment loading failed with exit code: $exit_code"
+    return $exit_code
   fi
-
-  # Add local mode flag only for local-only mode
-  if [[ "${SETUP_MODE:-}" == "local" ]]; then
-    load_options="$load_options --local"
-  fi
-
-  load_environment "$env_arg" "$load_options"
 }
 
 # Upload to GitHub (or dry run)
@@ -160,46 +151,6 @@ upload_to_github() {
     fi
     upload_github_data
   fi
-}
-
-wizard_mode() {
-  log_header "DeWire Environment Setup Wizard v4"
-  # Determine which env file to use
-  local env_file="$ENV_FILE"
-  if [[ ! -f $env_file ]]; then
-    log_info "No $env_file found. Setting up environment."
-  elif [[ ! -s $env_file ]]; then
-    log_info "Empty $env_file found. Setting up environment."
-  else
-    log_info "Incomplete $env_file found. Completing setup."
-  fi
-
-  # Don't parse schema again - already parsed in main
-  log_ok "Schema loaded: ${#REQUIRED_VARS[@]} required, ${#LOCAL_REQUIRED_VARS[@]} local, ${#ENV_REQUIRED_VARS[@]} env variables"
-
-  if [[ -f ${ENV_FILE}.setup ]]; then
-    log_ok "Loading values from ${ENV_FILE}.setup"
-    env_file="${ENV_FILE}.setup"
-  fi
-
-  # Parse DEWIRE behavior flags
-  local dewire_allow dewire_ask
-  if ! dewire_allow=$(get_env_var "" "DEWIRE_ALLOW_CUSTOM_VARS" "$env_file" 2>/dev/null); then
-    dewire_allow="true"
-  fi
-  if ! dewire_ask=$(get_env_var "" "DEWIRE_ASK_ON_CUSTOM_VARS" "$env_file" 2>/dev/null); then
-    dewire_ask="true"
-  fi
-  export DEWIRE_ALLOW_CUSTOM_VARS="$dewire_allow"
-  export DEWIRE_ASK_ON_CUSTOM_VARS="$dewire_ask"
-
-  # Don't call choose_setup_mode again - already set in main
-  generate_env
-
-  # After generation, load the main env file
-  local load_opts="--skip-validation --skip-schema-parse" # Schema already parsed above
-  [[ "${SETUP_MODE:-}" == "local" ]] && load_opts="$load_opts --local"
-  load_environment "${PARSED_ARGS[0]:-}" "$load_opts"
 }
 
 main "$@"

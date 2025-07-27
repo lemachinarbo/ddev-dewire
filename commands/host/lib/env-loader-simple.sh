@@ -8,7 +8,7 @@
 ENV_LOADER_SIMPLE_LOADED=1
 
 # Source required dependencies
-source "$(dirname "${BASH_SOURCE[0]}")/schema-parser.sh" 
+source "$(dirname "${BASH_SOURCE[0]}")/schema-parser.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/env-validator.sh"
 
 # Environment configuration
@@ -43,7 +43,10 @@ _load_vars_from_list() {
   shift 2
   local var_list=("$@")
   for var in "${var_list[@]}"; do
-    [[ -z "$var" ]] && { debug "Skipping empty variable"; continue; }
+    [[ -z "$var" ]] && {
+      debug "Skipping empty variable"
+      continue
+    }
     local full_var="$var"
     [[ -n "$prefix" ]] && full_var="${prefix}_$var"
     local value
@@ -63,14 +66,17 @@ _load_vars_from_list() {
 # Load all environment variables into global scope
 load_env_variables() {
   local env_file="${1:-$ENV_FILE}"
-  [[ ! -f "$env_file" ]] && { debug "Env file not found: $env_file"; return 1; }
+  [[ ! -f "$env_file" ]] && {
+    debug "Env file not found: $env_file"
+    return 1
+  }
   _load_vars_from_list "$env_file" "" "${REQUIRED_VARS[@]}" "${OPTIONAL_VARS[@]}" "${LOCAL_REQUIRED_VARS[@]}" "${LOCAL_OPTIONAL_VARS[@]}"
   local environments
   environments=$(get_env_environments "$env_file" 2>/dev/null)
   if [[ -z "$environments" ]]; then
     debug "get_env_environments failed or empty, skipping env-specific variables"
   else
-    IFS=' ' read -r -a env_array <<< "$environments"
+    IFS=' ' read -r -a env_array <<<"$environments"
     for env in "${env_array[@]}"; do
       debug "Loading variables for environment: $env"
       _load_vars_from_list "$env_file" "$env" "${ENV_REQUIRED_VARS[@]}" "${ENV_OPTIONAL_VARS[@]}"
@@ -116,11 +122,11 @@ load_environment() {
   local verbose_mode="false" permissive_mode="false" local_mode="false" skip_validation="false" skip_schema_parse="false"
   for opt in $options; do
     case "$opt" in
-      --verbose) verbose_mode="true" ;;
-      --no-env) permissive_mode="true" ;;
-      --local) local_mode="true" ;;
-      --skip-validation) skip_validation="true" ;;
-      --skip-schema-parse) skip_schema_parse="true" ;;
+    --verbose) verbose_mode="true" ;;
+    --no-env) permissive_mode="true" ;;
+    --local) local_mode="true" ;;
+    --skip-validation) skip_validation="true" ;;
+    --skip-schema-parse) skip_schema_parse="true" ;;
     esac
   done
   [[ "${ALLOW_MISSING_ENV:-false}" == "true" ]] && permissive_mode="true"
@@ -142,8 +148,8 @@ load_environment() {
     debug "Validation passed successfully"
   fi
   load_env_variables "$ENV_FILE"
-  debug "Checking environment selection: local_mode=$local_mode, SETUP_MODE=${SETUP_MODE:-unset}"
-  if [[ "$local_mode" == "false" ]] && [[ "${SETUP_MODE:-}" != "local" ]]; then
+  debug "Checking environment selection: local_mode=$local_mode"
+  if [[ "$local_mode" == "false" ]]; then
     local environments
     environments=$(get_env_environments)
     debug "Found environments: $environments"
