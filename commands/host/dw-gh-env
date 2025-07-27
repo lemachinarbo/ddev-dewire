@@ -107,15 +107,6 @@ parse_args() {
   export DEBUG DRY_RUN LAZY_MODE VERBOSE
 }
 
-# Backup env file if it exists and is non-empty
-backup_env_file() {
-  if [[ -f $ENV_FILE && -s $ENV_FILE ]]; then
-    TIMESTAMP=$(date +"%Y%m%d%H%M%S")
-    log_info "Backing up existing $ENV_FILE to $ENV_FILE.backup.$TIMESTAMP"
-    cp $ENV_FILE "$ENV_FILE.backup.$TIMESTAMP"
-  fi
-}
-
 # Load all configured environments
 load_selected_environment() {
   debug "Loading all configured environments from .env file"

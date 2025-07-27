@@ -4,6 +4,10 @@ project_files:
   - docker-compose.compwser.yaml
   - commands/host/lib/common.sh
   - commands/host/lib/env-loader.sh
+  - commands/host/lib/env-wizard-complete.sh
+  - commands/host/lib/env-wizard-configure.sh
+  - commands/host/lib/env-wizard-githubvars.sh
+  - commands/host/lib/env-wizard-prompt.sh
   - commands/host/lib/env-loader-simple.sh
   - commands/host/lib/env-selector.sh
   - commands/host/lib/schema-parser.sh
